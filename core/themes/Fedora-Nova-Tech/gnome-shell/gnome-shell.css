@@ -243,13 +243,15 @@ stage {
 .app-folder-dialog .overview-icon {
   border-radius: 14px;
   transition-duration: 80ms;
+  min-width: 100% !important;
+  min-height: 100% !important;
 }
 .overview-icon:hover,
 .overview-icon:focus,
 .overview-icon:selected,
 .app-folder:hover {
   background-color: rgba(46, 216, 232, 0.13);
-  box-shadow: inset 0 0 0 1px rgba(46, 216, 232, 0.26);
+  box-shadow: inset 0 0 0 50px rgba(46, 216, 232, 0.26);
 }
 
 .app-folder-dialog {
@@ -280,7 +282,7 @@ stage {
 #dash .overview-icon:hover,
 #dashtodockContainer .overview-icon:hover {
   background-color: rgba(46, 216, 232, 0.13);
-  box-shadow: inset 0 0 0 1px rgba(46, 216, 232, 0.28);
+  box-shadow: inset 0 0 0 50px rgba(46, 216, 232, 0.28);
 }
 
 .app-grid-running-dot,
@@ -505,31 +507,34 @@ stage {
 /* ── Tela Circle integration ─────────────────────────────────────────── */
 .app-well-app .overview-icon,
 .show-apps .overview-icon,
-.app-folder .overview-icon,
 .grid-search-result .overview-icon,
-.dash-item-container .overview-icon {
+.dash-item-container .overview-icon { 
   background-color: transparent !important;
   box-shadow: none !important;
   border-radius: 999px !important;
   /* background-color: rgba(46, 216, 232, 0.20) !important;
   background-image: none !important;
   border: 0 !important;
-  border-radius: 999px !important;
+  border-radius: 999px !important; 
   box-shadow:
     0 0 0 155px rgba(46, 216, 232, 0.17),
     inset 0 0 0 155px rgba(46, 216, 232, 0.68),
     inset 0 0 0 155px rgba(140, 92, 255, 0.14) !important; */
 }
 
+.app-folder .overview-icon {
+  background-color: transparent;
+  background-image: none !important;
+}
+
 .app-well-app:hover .overview-icon,
-.app-well-app:focus .overview-icon,
-.show-apps:hover .overview-icon,
-.app-folder:hover .overview-icon,
+.app-well-app:focus .overview-icon, 
+.show-apps:hover .overview-icon, 
 .grid-search-result:hover .overview-icon,
 .dash-item-container:hover .overview-icon {
   /* background-color: rgba(46, 216, 232, 0.11) !important; */
   /* box-shadow: inset 0 0 0 50px rgba(46, 216, 232, 0.24), inset 0 0 0 55px rgba(96, 64, 110, 0.78) !important; */
-  /* border-radius: 999px !important; */
+  /* border-radius: 999px !important; */ 
   background-color: rgba(46, 216, 232, 0.20) !important;
   background-image: none !important;
   border: 0 !important;
@@ -540,7 +545,12 @@ stage {
   /* border-width: 1px !important; */
   /* border-color: rgba(96, 64, 110, 0.78) !important; */  
   /* border: 2px solid rgba(96, 64, 110, 0.78) !important; */
-  box-shadow: 0 0 0 55px rgba(46, 216, 232, 0.68), inset 0 0 0 50px rgba(96, 64, 110, 0.78), inset 0 0 0 50px rgba(46, 216, 232, 0.68) !important;
+  box-shadow: 0 0 0 55px rgba(46, 216, 232, 0.68), inset 0 0 0 50px rgba(96, 64, 110, 0.78) !important;
+} 
+
+.app-folder:hover .overview-icon {
+  background-color: transparent;
+  background-image: url("assets/app-folder-squircle.svg") !important;
 }
 
 /* NOVA_TRUE_SQUIRCLE_START */
@@ -576,9 +586,9 @@ stage {
   background-image: none !important;
   border-color: transparent !important;
   box-shadow: none !important;
-} */
-
-.overview-tile:hover,
+} */ 
+ 
+/* .overview-tile:hover,
 .overview-tile:focus,
 .overview-tile:selected,
 .overview-tile:active,
@@ -619,7 +629,7 @@ stage {
   border-color: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
-}
+} */
 
 
 /* BaseIcon contains icon-bin and label. Keep the wrapper transparent. */
@@ -637,12 +647,12 @@ stage {
 .overview-tile .overview-icon:active,
 .overview-tile .overview-icon:checked,
 .overview-tile .overview-icon:outlined,
-.overview-tile .overview-icon.focused {
+.overview-tile .overview-icon.focused { 
   background-color: transparent !important;
-  background-image: none !important;
+  background-image: none !important; 
   border: 0 !important;
   border-color: transparent !important;
-  box-shadow: none !important;
+  box-shadow: none !important;    
 } */
 
 /* Dash to Dock v105 paints $remark_color directly on .overview-icon.
@@ -653,8 +663,8 @@ stage {
 #dashtodockContainer.top #dash .dash-background,
 #dashtodockContainer.left #dash .dash-background,
 #dashtodockContainer.right #dash .dash-background {
-  background-color: rgba(9, 8, 27, 0.94) !important;
-  border-color: rgba(96, 64, 110, 0.82) !important;
+  background-color: rgba(9, 8, 27, 0.94) !important; 
+  border-color: rgba(96, 64, 110, 0.82) !important; 
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.34) !important;
 }
 
@@ -853,10 +863,10 @@ stage {
 #dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:checked .overview-icon,
 #dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:outlined .overview-icon,
 #dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app.focused .overview-icon,
-#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash- item-container .show-apps .overview-icon,
 #dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:hover .overview-icon,
 #dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:focus .overview-icon,
-#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:selected .overview-icon,
+#dashtodockContainer.dashtodock #dash .da sh-item-container .show-apps:selected .overview-icon,
 #dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:active .overview-icon,
 #dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:checked .overview-icon,
 #dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:outlined .overview-icon,
@@ -911,13 +921,13 @@ stage {
 .overview-tile .overview-icon:outlined > StBoxLayout > StBin,
 .overview-tile .overview-icon.focused > StBoxLayout > StBin {
   background-color: rgba(46, 216, 232, 0.18) !important;
-  background-image: none !important;
+  background-image: none !important; 
   border: 0 !important;
   border-radius: 999px !important;
   box-shadow:
-    0 0 0 155px rgba(46, 216, 232, 0.15),
-    inset 0 0 0 155px rgba(46, 216, 232, 0.62),
-    inset 0 0 0 155px rgba(140, 92, 255, 0.12) !important;
+    0 0 0 5px rgba(46, 216, 232, 0.15),
+    inset 0 0 0 2px rgba(46, 216, 232, 0.62),
+    inset 0 0 0 3px rgba(140, 92, 255, 0.12) !important;
 } */
 
 
@@ -1058,7 +1068,7 @@ stage {
 } */
 
 /* Dock has less free space, so use a smaller but still colored halo. */
-.dash-item-container:hover .overview-icon > StBoxLayout > StBin,
+/* .dash-item-container:hover .overview-icon > StBoxLayout > StBin,
 .dash-item-container:focus .overview-icon > StBoxLayout > StBin,
 .dash-item-container:selected .overview-icon > StBoxLayout > StBin,
 .dash-item-container:active .overview-icon > StBoxLayout > StBin,
@@ -1073,7 +1083,7 @@ stage {
     0 0 0 55px rgba(46, 216, 232, 0.17),
     inset 0 0 0 55px rgba(46, 216, 232, 0.68),
     inset 0 0 0 55px rgba(140, 92, 255, 0.14) !important;
-}
+} */
 
 /* Show Applications has no BaseIcon StBin label structure. */
 /* .dash-item-container .show-apps:hover .overview-icon,
@@ -1201,7 +1211,7 @@ stage {
   background-color: transparent !important;
   background-image: none !important;
   border: 0 !important;
-  box-shadow: none !important;
+  box-shadow: none !important;   
 } */
 
 /* .dash-item-container .overview-tile:hover .overview-icon,
@@ -1209,7 +1219,7 @@ stage {
 .dash-item-container .show-apps:hover .overview-icon {
   background-color: rgba(46, 216, 232, 0.68) !important;
   border-radius: 999px !important;
-} */
+} */ 
 /* NOVA_HOVER_END */
 
 /* NOVA_CURVE_START */
@@ -1221,7 +1231,7 @@ stage {
  * nested radii, consistent icon plates and preserved true circles.
  */
 
-#panel .panel-button,
+#panel .panel-button, 
 #panel .panel-button.clock-display .clock {
   border-radius: 14px;
 }
@@ -1327,7 +1337,7 @@ stage {
 .toggle-switch,
 .avatar,
 .user-icon,
-#panel #panelActivities .workspace-dot,
+#panel #panelActivities .workspace-dot, 
 .app-grid-running-dot,
 .app-well-app-running-dot {
   border-radius: 999px;

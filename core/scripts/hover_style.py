@@ -175,7 +175,6 @@ def common_reset(dock: str, border: str) -> str:
     return f'''
 .app-well-app .overview-icon,
 .show-apps .overview-icon,
-.app-folder .overview-icon,
 .grid-search-result .overview-icon,
 .dash-item-container .overview-icon {{
   background-color: transparent !important;
@@ -183,20 +182,30 @@ def common_reset(dock: str, border: str) -> str:
   border-radius: 999px !important;
 }}
 
+.app-folder .overview-icon {{
+  background-color: transparent !important;
+  background-image: none !important;
+}}
+
 .app-well-app:hover .overview-icon,
 .app-well-app:focus .overview-icon,
 .show-apps:hover .overview-icon,
-.app-folder:hover .overview-icon,
 .grid-search-result:hover .overview-icon,
 .dash-item-container:hover .overview-icon {{
   background-color: rgba(46, 216, 232, 0.20) !important;
   background-image: none !important;
   border: 0 !important;
   border-radius: 999px !important;
-  box-shadow: 0 0 0 50px rgba(46, 216, 232, 0.68), inset 0 0 0 20px rgba(96, 64, 110, 0.78) !important;
+  box-shadow: 0 0 0 55px rgba(46, 216, 232, 0.68), inset 0 0 0 50px rgba(96, 64, 110, 0.78) !important;
 }}
 
-/* The outer tile contains the label, so keep it visually empty. */
+.app-folder:hover .overview-icon {{
+  background-color: transparent !important;
+  background-image: url("assets/app-folder-squircle.svg") !important;
+  box-shadow: none !important;
+}}
+
+.overview-tile,
 .overview-tile:hover,
 .overview-tile:focus,
 .overview-tile:selected,
@@ -210,14 +219,11 @@ def common_reset(dock: str, border: str) -> str:
 .overview-tile.app-folder:active,
 .overview-tile.app-folder:checked,
 .overview-tile.app-folder:outlined {{
-  background-color: rgba(46, 216, 232, 0.18) !important;
+  background-color: transparent !important;
   background-image: none !important;
-  border: 0 !important;
-  border-radius: 999px !important;
-  box-shadow:
-    0 0 0 50px rgba(46, 216, 232, 0.15),
-    inset 0 0 0 20px rgba(46, 216, 232, 0.62),
-    inset 0 0 0 30px rgba(140, 92, 255, 0.12) !important;
+  border-color: transparent !important;
+  box-sizing: border-box !important;
+  box-shadow: none !important;
 }}
 
 #dashtodockContainer #dash .overview-tile:hover,
@@ -297,6 +303,30 @@ def circle_body(
     dock_active = icon_bin_selector(True, dock_only=True)
 
     return reset + f'''
+
+{grid_normal},
+{dock_normal} {{
+  background-color: rgba(0, 0, 0, 0.01) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+  transition-duration: 100ms;
+}}
+    
+/* App grid: large external halo, especially visible around visually small
+ * icons such as Files. No padding or margin changes. */
+{grid_active} {{
+  background-color: rgba({ar}, {ag}, {ab}, 0.18) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow:
+    0 0 0 {grid_halo}px rgba({ar}, {ag}, {ab}, 0.15),
+    inset 0 0 0 2px rgba({ar}, {ag}, {ab}, 0.62),
+    inset 0 0 0 3px rgba({sr}, {sg}, {sb}, 0.12) !important;
+}}
+
 /* Dock has less free space, so use a smaller but still colored halo. */
 {dock_active} {{
   background-color: rgba({ar}, {ag}, {ab}, 0.20) !important;
@@ -307,6 +337,23 @@ def circle_body(
     0 0 0 {dock_halo}px rgba({ar}, {ag}, {ab}, 0.17),
     inset 0 0 0 2px rgba({ar}, {ag}, {ab}, 0.68),
     inset 0 0 0 3px rgba({sr}, {sg}, {sb}, 0.14) !important;
+}}
+
+/* Never paint the icon texture or folder miniature itself. */
+.overview-tile .overview-icon > StBoxLayout > StBin > StIcon,
+.overview-tile .overview-icon > StBoxLayout > StBin > StWidget {{
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}}
+
+.app-folder:hover .overview-icon > StBoxLayout > StBin,
+.app-folder:hover .overview-icon > StBoxLayout > StBin {{
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }}
 '''
 
