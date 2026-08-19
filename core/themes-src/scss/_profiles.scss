@@ -1,0 +1,47 @@
+$profiles: (
+  tech: (
+    theme: "Fedora-Nova-Tech",
+    accent: #2ED8E8,
+    accent-bright: #6FE7F7,
+    secondary: #8C5CFF,
+    text: #F8EFFF,
+    border: #60406E,
+    dock-color: #09081B
+  ),
+  clean: (
+    theme: "Fedora-Nova-Clean",
+    accent: #54C7D5,
+    accent-bright: #8BDDE5,
+    secondary: #8D7CCE,
+    text: #E9F0F7,
+    border: #3B5367,
+    dock-color: #0D1824
+  ),
+  midnight: (
+    theme: "Fedora-Nova-Midnight",
+    accent: #9B6CFF,
+    accent-bright: #C39EFF,
+    secondary: #2ED8E8,
+    text: #F0EDFF,
+    border: #484573,
+    dock-color: #080B1D
+  ),
+  glass-lite: (
+    theme: "Fedora-Nova-Glass-Lite",
+    accent: #35DCE8,
+    accent-bright: #7CEBF2,
+    secondary: #9A67FF,
+    text: #EBF6FF,
+    border: #37617D,
+    dock-color: #071426
+  ),
+  pulse: (
+    theme: "Fedora-Nova-Pulse",
+    accent: #D630F2,
+    accent-bright: #F07CFF,
+    secondary: #2ED8E8,
+    text: #F8EFFF,
+    border: #60406E,
+    dock-color: #09081B
+  )
+) !default;

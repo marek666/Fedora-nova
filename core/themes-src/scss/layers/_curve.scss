@@ -1,0 +1,127 @@
+@mixin nova-curve-layer {
+/* NOVA_CURVE_START */
+/* Fedora Nova 0.6 - Continuous Curve layer
+ * preset: squircle
+ *
+ * GNOME Shell does not expose Apple's private continuous-corner primitive.
+ * This approximates it using large outer radii, proportionally smaller
+ * nested radii, consistent icon plates and preserved true circles.
+ */
+
+#panel .panel-button,
+#panel .panel-button.clock-display .clock {
+  border-radius: 14px;
+}
+
+.quick-settings,
+.datemenu-popover,
+.popup-menu-content,
+.candidate-popup-content,
+.app-folder-dialog,
+.switcher-list,
+.workspace-switcher,
+.screenshot-ui-panel,
+#lookingGlassDialog {
+  border-radius: 32px;
+}
+
+.modal-dialog,
+.osd-window {
+  border-radius: 30px;
+}
+
+.notification-banner {
+  border-radius: 24px;
+}
+
+.quick-toggle-menu,
+.datemenu-today-button,
+.calendar,
+.events-button,
+.world-clocks-button,
+.weather-button,
+.message,
+.media-message,
+.search-section-content,
+.workspace-thumbnail,
+.window-caption {
+  border-radius: 24px;
+}
+
+.popup-menu-item,
+.popup-sub-menu,
+.quick-toggle,
+.quick-toggle-has-menu,
+.quick-toggle-menu .header .icon,
+.calendar .calendar-month-header .calendar-month-label,
+.calendar .calendar-month-header .pager-button,
+.message-list-clear-button,
+.message-media-control,
+.modal-dialog-linked-button,
+.search-entry,
+.search-provider-icon,
+.app-folder-dialog .folder-name-container,
+.switcher-list .item-box,
+.screenshot-ui-type-button,
+.button {
+  border-radius: 17px;
+}
+
+.app-well-app .overview-icon,
+.show-apps .overview-icon,
+.app-folder .overview-icon,
+.grid-search-result .overview-icon,
+.search-provider-icon,
+.dash-item-container .overview-icon {
+  border-radius: 20px;
+}
+
+#dash .dash-background,
+#dashtodockContainer #dash .dash-background,
+.dash-to-dock .dash-background {
+  border-radius: 30px;
+}
+
+.dash-label,
+.tooltip,
+.workspace-thumbnail .window-caption {
+  border-radius: 13px;
+}
+
+.quick-toggle-has-menu .quick-toggle:ltr {
+  border-radius: 17px 0 0 17px;
+}
+.quick-toggle-has-menu .quick-toggle:rtl {
+  border-radius: 0 17px 17px 0;
+}
+.quick-toggle-has-menu .quick-toggle-menu-button:ltr {
+  border-radius: 0 17px 17px 0;
+}
+.quick-toggle-has-menu .quick-toggle-menu-button:rtl {
+  border-radius: 17px 0 0 17px;
+}
+
+.app-folder,
+.app-folder-dialog .folder-name-container,
+.workspace-thumbnail {
+  border-radius: 24px;
+}
+
+.calendar .calendar-day,
+.quick-settings-system-item .icon-button,
+.quick-settings-system-item .power-item,
+.screenshot-ui-capture-button,
+.toggle-switch,
+.avatar,
+.user-icon,
+#panel #panelActivities .workspace-dot,
+.app-grid-running-dot,
+.app-well-app-running-dot {
+  border-radius: 999px;
+}
+
+.slider {
+  -slider-handle-radius: 10px;
+}
+/* NOVA_CURVE_END */
+}

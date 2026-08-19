@@ -1,0 +1,57 @@
+{
+  "default": "squircle",
+  "presets": {
+    "classic": {
+      "title": "Classic",
+      "description": "Původní střídmě zaoblený vzhled 0.4.",
+      "panel": 10,
+      "compact": 9,
+      "control": 11,
+      "icon_plate": 12,
+      "card": 15,
+      "popover": 20,
+      "dialog": 18,
+      "dock": 20,
+      "slider_handle": 8
+    },
+    "soft": {
+      "title": "Soft Curve",
+      "description": "Měkčí rohy bez výrazného bubble efektu.",
+      "panel": 12,
+      "compact": 11,
+      "control": 14,
+      "icon_plate": 16,
+      "card": 19,
+      "popover": 25,
+      "dialog": 24,
+      "dock": 25,
+      "slider_handle": 9
+    },
+    "squircle": {
+      "title": "Continuous Squircle",
+      "description": "Výchozí Apple-like poměr vnějších a vnitřních rohů.",
+      "panel": 14,
+      "compact": 13,
+      "control": 17,
+      "icon_plate": 20,
+      "card": 24,
+      "popover": 32,
+      "dialog": 30,
+      "dock": 30,
+      "slider_handle": 10
+    },
+    "ultra": {
+      "title": "Ultra Curve",
+      "description": "Velmi měkký, výrazně organický vzhled.",
+      "panel": 18,
+      "compact": 16,
+      "control": 22,
+      "icon_plate": 25,
+      "card": 30,
+      "popover": 40,
+      "dialog": 38,
+      "dock": 38,
+      "slider_handle": 12
+    }
+  }
+}

@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$ROOT/scripts/lib.sh"
+
+usage() {
+  cat <<'USAGE'
+Fedora Nova Control
+
+Usage: fedora-nova COMMAND [ARGS]
+
+  settings                             nativní GTK4/libadwaita nastavení
+  control                              alias pro settings
+  preset [full] [PROFILE] [--reload]    kompletní persistentní Nova desktop
+  full-setup [PROFILE] [--reload]       alias pro preset full
+  profile [NAME] [--reload]            profil nebo výpis profilů
+  forge NAME PRIMARY [SECONDARY]       vytvoří a aplikuje vlastní profil
+  custom list                          vlastní profily
+  custom delete PROFILE               odstraní neaktivní vlastní profil
+  rollback                             návrat k předchozímu profilu
+  dock [PRESET]                        dock preset
+  motion [PRESET]                      reduced / balanced / smooth
+  curve [PRESET]                       classic / soft / squircle / ultra
+  hover [PRESET]                       circle / circle-compact / tile / none
+  gtk {on|off|refresh|status}          barvy pro Soubory, Textový editor a Nastavení
+  icons [PRESET]                       tela / tela-dark / tela-light / tela-steam / papirus / adwaita
+  steam-icons {round|restore|status}   kruhové ikony Steam her
+  monitors {on|off|status|refresh}      horní panel na sekundárních monitorech
+  session-restore {apply|enable|disable|status}
+                                       znovu aplikuje Nova setup po přihlášení
+  snapshot create [NAME]               pojmenovaný bod obnovy
+  snapshot list|restore|delete ...     správa snapshotů
+  export [FILE.tar.gz]                 přenosná záloha včetně Forge profilů
+  import FILE.tar.gz                   import přenosné zálohy
+  status                               aktivní stav
+  doctor                               diagnostika
+  reload                               reload User Themes extension
+  preview                              lokální přehled
+  safe-mode                            vypne Nova theme a dock
+  restore [BACKUP]                     obnoví standardní zálohu
+  version                              verze
+USAGE
+}
+
+cmd="${1:-help}"
+shift || true
+case "$cmd" in
+  settings|control) "$ROOT/scripts/control.sh" "$@" ;;
+  preset)
+    if [[ $# -eq 0 ]]; then "$ROOT/scripts/apply-preset.sh" list
+    else "$ROOT/scripts/apply-preset.sh" "$@"; fi ;;
+  full-setup) "$ROOT/scripts/apply-preset.sh" full "$@" ;;
+  profile)
+    if [[ $# -eq 0 ]]; then "$ROOT/scripts/apply-profile.sh" list
+    else "$ROOT/scripts/apply-profile.sh" "$@"; fi ;;
+  forge) "$ROOT/scripts/forge-profile.sh" "$@" ;;
+  custom) "$ROOT/scripts/custom-profile.sh" "$@" ;;
+  rollback) "$ROOT/scripts/rollback-profile.sh" ;;
+  dock)
+    if [[ $# -eq 0 ]]; then "$ROOT/scripts/apply-dock.sh" list
+    else "$ROOT/scripts/apply-dock.sh" "$@"; fi ;;
+  motion)
+    if [[ $# -eq 0 ]]; then "$ROOT/scripts/apply-motion.sh" list
+    else "$ROOT/scripts/apply-motion.sh" "$@"; fi ;;
+  curve)
+    if [[ $# -eq 0 ]]; then "$ROOT/scripts/apply-curve.sh" list
+    else "$ROOT/scripts/apply-curve.sh" "$@"; fi ;;
+  hover)
+    if [[ $# -eq 0 ]]; then "$ROOT/scripts/apply-hover.sh" list
+    else "$ROOT/scripts/apply-hover.sh" "$@"; fi ;;
+  gtk) "$ROOT/scripts/gtk-theme.sh" "${1:-status}" ;;
+  icons) "$ROOT/scripts/apply-icons.sh" "${1:-list}" ;;
+  steam-icons) "$ROOT/scripts/steam-icons.sh" "${1:-status}" "${2:-}" ;;
+  monitors) "$ROOT/scripts/monitor-panel.sh" "${1:-status}" ;;
+  session-restore)
+    if [[ $# -eq 0 ]]; then "$ROOT/scripts/session-restore.sh" status
+    else "$ROOT/scripts/session-restore.sh" "$@"; fi ;;
+  snapshot) "$ROOT/scripts/snapshot.sh" "$@" ;;
+  export) "$ROOT/scripts/export-config.sh" "${1:-}" ;;
+  import) "$ROOT/scripts/import-config.sh" "${1:-}" ;;
+  status) "$ROOT/scripts/status.sh" ;;
+  doctor) "$ROOT/scripts/doctor.sh" ;;
+  reload) "$ROOT/scripts/reload-theme.sh" ;;
+  preview) xdg-open "$ROOT/preview/index.html" >/dev/null 2>&1 & ;;
+  safe-mode) "$ROOT/scripts/nova-safe-mode.sh" ;;
+  restore) "$ROOT/scripts/restore-settings.sh" "${1:-}" ;;
+  version|--version|-V) printf '%s %s\n' "$NOVA_NAME" "$NOVA_VERSION" ;;
+  help|-h|--help) usage ;;
+  *) usage; die "Neznámý příkaz: $cmd" ;;
+esac

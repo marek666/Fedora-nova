@@ -1,0 +1,13 @@
+#!@PYTHON@
+from __future__ import annotations
+
+import os
+import sys
+
+PKGDATADIR = "@PKGDATADIR@"
+sys.path.insert(0, PKGDATADIR)
+os.environ.setdefault("FEDORA_NOVA_CORE", os.path.join(PKGDATADIR, "core"))
+
+from fedora_nova.application import main
+
+raise SystemExit(main())

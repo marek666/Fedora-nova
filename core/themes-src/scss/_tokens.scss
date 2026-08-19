@@ -1,0 +1,22 @@
+@import "profiles";
+
+$profile-name: tech !default;
+$profile-data: map-get($profiles, $profile-name);
+
+@if $profile-data == null {
+  @error "Unknown Fedora Nova profile: #{$profile-name}";
+}
+
+@function nova-token($key) {
+  $value: map-get($profile-data, $key);
+
+  @if $value == null {
+    @error "Missing Fedora Nova token: #{$key}";
+  }
+
+  @return $value;
+}
+
+@function nova-rgba($key, $alpha) {
+  @return rgba(nova-token($key), $alpha);
+}

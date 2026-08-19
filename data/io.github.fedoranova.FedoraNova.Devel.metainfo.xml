@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.fedoranova.FedoraNova.Devel</id>
+  <name>Fedora Nova Settings</name>
+  <summary>Develop and configure the Fedora Nova desktop theme</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <url type="homepage">https://github.com/fedoranova/FedoraNova</url>
+  <description>
+    <p>
+      Fedora Nova Settings is a responsive GTK4 and libadwaita control
+      application for the Fedora Nova GNOME theme project.
+    </p>
+    <p>
+      The development build supports a safe preview backend when run
+      inside Flatpak and a host backend for testing real GNOME changes.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.fedoranova.FedoraNova.Devel.desktop</launchable>
+  <developer id="io.github.fedoranova">
+    <name>Fedora Nova contributors</name>
+  </developer>
+  <releases>
+    <release version="0.7.2-dev" date="2026-08-05">
+      <description>
+        <p>Add in-app System Host backend and stock GNOME system profile.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

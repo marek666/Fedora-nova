@@ -1,0 +1,11 @@
+
+[Desktop Entry]
+Name=Fedora Nova Settings (Devel)
+Comment=Responsive development settings for Fedora Nova
+Exec=fedora-nova-settings-devel
+Icon=io.github.fedoranova.FedoraNova.Devel
+Terminal=false
+Type=Application
+Categories=Settings;DesktopSettings;GTK;
+Keywords=Fedora;GNOME;theme;icons;dock;appearance;
+StartupNotify=true

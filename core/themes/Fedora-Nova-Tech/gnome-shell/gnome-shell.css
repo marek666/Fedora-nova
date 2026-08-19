@@ -1,0 +1,1339 @@
+/* Fedora Nova 0.6.0 — GNOME Shell 50 overlay
+ * Profile: Nova Tech — Purple Base
+ * Performance policy:
+ *   - no dynamic blur
+ *   - large Quick Settings and Date Menu actors are opaque
+ *   - no wide shadows or transitions inside large popovers
+ */
+@import url("resource:///org/gnome/theme/gnome-shell.css");
+
+stage {
+  font-family: "Inter", "Adwaita Sans", sans-serif;
+  color: #F8EFFF;
+}
+
+/* ── Top panel ─────────────────────────────────────────────────────────── */
+#panel {
+  background-color: #050817;
+  color: #F8EFFF;
+  border-bottom: 1px solid rgba(46, 216, 232, 0.28);
+  box-shadow: inset 0 -1px 0 rgba(140, 92, 255, 0.12);
+  height: 38px;
+  transition-duration: 120ms;
+}
+
+#panel:overview {
+  background-color: #050817;
+  border-bottom-color: rgba(46, 216, 232, 0.62);
+}
+
+/* #panelLeft, #panelCenter, #panelRight { padding: 5px; } */
+
+#panel .panel-button {
+  color: #F8EFFF;
+  border-radius: 10px;
+  margin: 3px 2px;
+  transition-duration: 90ms;
+}
+
+#panel .panel-button:hover,
+#panel .panel-button:focus {
+  background-color: rgba(46, 216, 232, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(46, 216, 232, 0.28);
+}
+
+#panel .panel-button:active,
+#panel .panel-button:checked {
+  color: #F8EFFF;
+  background-color: rgba(46, 216, 232, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(46, 216, 232, 0.62);
+}
+
+#panel .panel-button.clock-display .clock {
+  /* background-color: #5e22c8; */
+  background-color: #21133A;
+  border: 1px solid rgba(46, 216, 232, 0.25);
+  border-radius: 10px;
+  padding: 0 12px;
+}
+
+#panel #panelActivities .workspace-dot {
+  background-color: #2ED8E8;
+  box-shadow: 0 0 4px rgba(46, 216, 232, 0.55);
+}
+
+#panel .system-status-icon { color: #F8EFFF; }
+#panel .privacy-indicator { color: #8C5CFF; }
+
+/* ── Generic popovers and cards ───────────────────────────────────────── */
+.popup-menu-content,
+.candidate-popup-content,
+.modal-dialog,
+.osd-window,
+.notification-banner {
+  background-color: #120C25;
+  color: #F8EFFF;
+  border: 1px solid rgba(96, 64, 110, 0.78);
+  border-radius: 15px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.34);
+}
+
+.popup-menu-content { padding: 8px; }
+
+.popup-menu-item {
+  color: #F8EFFF;
+  border-radius: 10px;
+  transition-duration: 80ms;
+}
+
+.popup-menu-item:hover,
+.popup-menu-item:focus,
+.popup-menu-item:selected {
+  background-color: rgba(46, 216, 232, 0.13);
+}
+
+.popup-menu-item:checked,
+.popup-menu-item:active {
+  background-color: rgba(46, 216, 232, 0.21);
+  box-shadow: inset 3px 0 0 #2ED8E8;
+}
+
+.popup-sub-menu {
+  background-color: #21133A;
+  border: 1px solid rgba(96, 64, 110, 0.55);
+}
+
+.popup-separator-menu-item .popup-separator-menu-item-separator {
+  background-color: rgba(96, 64, 110, 0.68);
+}
+
+/* ── Quick Settings: deliberately compositor-safe ────────────────────── */
+.quick-settings {
+  color: #F8EFFF;
+  background-color: #120C25;
+  border: 1px solid rgba(96, 64, 110, 0.82);
+  border-radius: 20px;
+  box-shadow: none;
+  padding: 18px;
+}
+
+/* .quick-settings-grid {
+  spacing-rows: 10px;
+  spacing-columns: 10px;
+} */
+
+.quick-toggle,
+.quick-toggle-has-menu {
+  color: #F8EFFF;
+  background-color: #21133A;
+  border: 1px solid rgba(96, 64, 110, 0.55);
+  border-radius: 14px;
+  box-shadow: none;
+  transition-duration: 0ms;
+}
+
+.quick-toggle:hover,
+.quick-toggle-has-menu:hover,
+.quick-toggle:focus,
+.quick-toggle-has-menu:focus {
+  background-color: #2B1749;
+  border-color: rgba(46, 216, 232, 0.38);
+}
+
+.quick-toggle:checked,
+.quick-toggle-has-menu:checked {
+  color: #06131a;
+  background-color: #2ED8E8;
+  border-color: #6FE7F7;
+  box-shadow: none;
+}
+
+.quick-toggle-has-menu .quick-toggle-menu-button {
+  color: #F8EFFF;
+  background-color: #2B1749;
+  border-color: transparent;
+  box-shadow: none;
+  transition-duration: 0ms;
+}
+
+.quick-toggle-has-menu .quick-toggle-menu-button:hover,
+.quick-toggle-has-menu .quick-toggle-menu-button:focus {
+  background-color: rgba(46, 216, 232, 0.22);
+}
+
+.quick-toggle-has-menu:checked .quick-toggle-menu-button,
+.quick-toggle-has-menu .quick-toggle-menu-button:checked {
+  color: #06131a;
+  background-color: #6FE7F7;
+}
+
+.quick-toggle-has-menu .quick-toggle-separator {
+  background-color: rgba(248, 239, 255, 0.18);
+}
+
+.quick-toggle-has-menu:checked .quick-toggle-separator {
+  background-color: rgba(6, 19, 26, 0.28);
+}
+
+.quick-settings-system-item .icon-button,
+.quick-settings-system-item .button,
+.quick-settings-system-item .power-item {
+  color: #F8EFFF;
+  background-color: #2B1749;
+  border: 1px solid rgba(96, 64, 110, 0.58);
+  border-radius: 999px;
+  box-shadow: none;
+  transition-duration: 0ms;
+}
+
+.quick-settings-system-item .icon-button:hover,
+.quick-settings-system-item .button:hover,
+.quick-settings-system-item .power-item:hover {
+  background-color: rgba(46, 216, 232, 0.20);
+  border-color: rgba(46, 216, 232, 0.58);
+}
+
+.quick-toggle-menu {
+  color: #F8EFFF;
+  background-color: #21133A;
+  border: 1px solid rgba(96, 64, 110, 0.68);
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+.quick-toggle-menu .header .icon {
+  background-color: #2B1749;
+  color: #6FE7F7;
+}
+.quick-toggle-menu .header .icon.active {
+  background-color: #2ED8E8;
+  color: #06131a;
+}
+
+.slider {
+  color: #F8EFFF;
+/*  -barlevel-height: 5px;
+  -barlevel-background-color: rgba(248, 239, 255, 0.16); */
+  -barlevel-active-background-color: #2ED8E8;
+  -barlevel-overdrive-color: #FF5C7A;
+  -barlevel-overdrive-separator-width: 1px;
+  -slider-handle-radius: 8px;
+}
+
+/* ── Overview / search / app grid ─────────────────────────────────────── */
+.search-entry {
+  color: #F8EFFF;
+  background-color: #21133A;
+  border: 1px solid rgba(96, 64, 110, 0.72);
+  border-radius: 14px;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.20);
+  /* election-background-color: #2ED8E8;
+  selected-color: #06131a; */
+  transition-duration: 80ms;
+}
+.search-entry:hover { border-color: rgba(46, 216, 232, 0.38); }
+.search-entry:focus {
+  background-color: #120C25;
+  border-color: #2ED8E8;
+  box-shadow: inset 0 0 0 1px rgba(46, 216, 232, 0.44);
+}
+
+.overview-icon,
+.app-folder,
+.app-folder-dialog .overview-icon {
+  border-radius: 14px;
+  transition-duration: 80ms;
+}
+.overview-icon:hover,
+.overview-icon:focus,
+.overview-icon:selected,
+.app-folder:hover {
+  background-color: rgba(46, 216, 232, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(46, 216, 232, 0.26);
+}
+
+.app-folder-dialog {
+  background-color: #120C25;
+  border: 1px solid rgba(96, 64, 110, 0.78);
+  border-radius: 22px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.30);
+}
+
+.workspace-thumbnail-indicator {
+  border: 2px solid #2ED8E8;
+  border-radius: 13px;
+  box-shadow: 0 0 6px rgba(46, 216, 232, 0.30);
+}
+
+/* ── Dash / Dash to Dock ──────────────────────────────────────────────── */
+#dash .dash-background,
+.dash-background {
+  background-color: #050817;
+  border: 1px solid rgba(96, 64, 110, 0.78);
+  border-radius: 20px;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.36);
+}
+
+#dash .overview-icon,
+#dashtodockContainer .overview-icon { border-radius: 13px; }
+
+#dash .overview-icon:hover,
+#dashtodockContainer .overview-icon:hover {
+  background-color: rgba(46, 216, 232, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(46, 216, 232, 0.28);
+}
+
+.app-grid-running-dot,
+.app-well-app-running-dot {
+  background-color: #2ED8E8;
+  box-shadow: 0 0 5px rgba(46, 216, 232, 0.60);
+}
+
+.dash-label {
+  color: #F8EFFF;
+  background-color: #050817;
+  border: 1px solid rgba(96, 64, 110, 0.74);
+  border-radius: 9px;
+}
+
+/* ── Date menu: deliberately compositor-safe ─────────────────────────── */
+.datemenu-popover {
+  color: #F8EFFF;
+  background-color: #120C25;
+  border: 1px solid rgba(96, 64, 110, 0.82);
+  border-radius: 20px;
+  box-shadow: none;
+}
+
+.datemenu-today-button,
+.calendar,
+.events-button,
+.world-clocks-button,
+.weather-button {
+  color: #F8EFFF;
+  background-color: #21133A;
+  border: 1px solid rgba(96, 64, 110, 0.52);
+  border-radius: 15px;
+  box-shadow: none;
+  transition-duration: 0ms;
+}
+
+.datemenu-today-button:hover,
+.events-button:hover,
+.world-clocks-button:hover,
+.weather-button:hover {
+  background-color: #2B1749;
+  border-color: rgba(46, 216, 232, 0.38);
+}
+.datemenu-today-button .day-label { color: #6FE7F7; }
+.datemenu-today-button .date-label { color: #F8EFFF; }
+
+.calendar .calendar-month-header .calendar-month-label,
+.calendar .calendar-month-header .pager-button {
+  color: #F8EFFF !important;
+  background-color: #2B1749;
+  border: 1px solid rgba(96, 64, 110, 0.55);
+  box-shadow: none;
+  transition-duration: 0ms;
+}
+.calendar .calendar-month-header .pager-button:hover {
+  background-color: rgba(46, 216, 232, 0.20);
+  border-color: rgba(46, 216, 232, 0.58);
+}
+
+.calendar .calendar-day {
+  color: #F8EFFF;
+  border-radius: 999px;
+  box-shadow: none;
+  transition-duration: 0ms;
+}
+.calendar .calendar-day:hover,
+.calendar .calendar-day:focus {
+  background-color: rgba(46, 216, 232, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(46, 216, 232, 0.28);
+}
+.calendar .calendar-day.calendar-today {
+  color: #06131a !important;
+  background-color: #2ED8E8;
+  box-shadow: none;
+}
+.calendar .calendar-day-heading { color: #B5A2C4; }
+.calendar .calendar-day.calendar-other-month { color: rgba(146, 166, 191, 0.58); }
+
+/* ── Notifications / media ────────────────────────────────────────────── */
+.message-list { border-color: rgba(96, 64, 110, 0.72); }
+.message-list-controls { color: #F8EFFF; }
+
+.message,
+.media-message {
+  color: #F8EFFF;
+  background-color: #2A1C3D;
+  border: 1px solid rgba(96, 64, 110, 0.52);
+  border-radius: 15px;
+  box-shadow: none;
+  transition-duration: 0ms;
+}
+.message:hover,
+.media-message:hover {
+  background-color: #2B1749;
+  border-color: rgba(46, 216, 232, 0.38);
+}
+.message .message-header,
+.message .event-time,
+.message .message-header .event-time { color: #B5A2C4; }
+.message .message-title,
+.message .message-source-title { color: #F8EFFF; }
+
+.media-message { box-shadow: inset 3px 0 0 #8C5CFF; }
+.message { box-shadow: inset 3px 0 0 rgba(46, 216, 232, 0.72); }
+
+.message-media-control {
+  color: #F8EFFF;
+  border-radius: 9px;
+  transition-duration: 0ms;
+}
+.message-media-control:hover { background-color: rgba(46, 216, 232, 0.14); }
+.message-media-control:active {
+  color: #06131a;
+  background-color: #2ED8E8;
+}
+
+.message-list-clear-button {
+  color: #F8EFFF;
+  background-color: #21133A;
+  border: 1px solid rgba(96, 64, 110, 0.55);
+  box-shadow: none;
+  transition-duration: 0ms;
+}
+.message-list-clear-button:hover {
+  background-color: rgba(46, 216, 232, 0.20);
+  border-color: rgba(46, 216, 232, 0.58);
+}
+
+/* ── Switchers / dialogs / screenshot UI / OSD ───────────────────────── */
+.switcher-list,
+.workspace-switcher {
+  color: #F8EFFF;
+  background-color: #120C25;
+  border: 1px solid rgba(96, 64, 110, 0.78);
+  border-radius: 18px;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.32);
+}
+.switcher-list .item-box { border-radius: 12px; }
+.switcher-list .item-box:selected {
+  background-color: rgba(46, 216, 232, 0.20);
+  box-shadow: inset 0 0 0 1px rgba(46, 216, 232, 0.55);
+}
+
+.screenshot-ui-panel {
+  color: #F8EFFF;
+  background-color: #120C25;
+  border: 1px solid rgba(96, 64, 110, 0.78);
+  border-radius: 18px;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.32);
+}
+.screenshot-ui-type-button:checked {
+  color: #06131a;
+  background-color: #2ED8E8;
+}
+.screenshot-ui-capture-button {
+  border: 3px solid #6FE7F7;
+  box-shadow: inset 0 0 0 4px #120C25;
+}
+
+.modal-dialog-linked-button,
+.icon-button,
+.button { transition-duration: 80ms; }
+.modal-dialog-linked-button:hover,
+.modal-dialog-linked-button:focus {
+  box-shadow: inset 0 0 0 1px rgba(140, 92, 255, 0.48);
+}
+.osd-window {
+  background-color: #050817;
+  border-color: rgba(46, 216, 232, 0.42);
+}
+
+
+/* ── Fedora Nova 0.3 interaction refinements ─────────────────────────── */
+/* Deliberately flat/opaque: no blur and no large animated shadow. */
+.window-caption,
+.search-section-content,
+.search-provider-icon,
+.app-menu .popup-inactive-menu-item:first-child {
+  color: #F8EFFF;
+}
+
+.window-caption {
+  background-color: #120C25;
+  border: 1px solid rgba(96, 64, 110, 0.78);
+  border-radius: 9px;
+  box-shadow: none;
+}
+
+.search-section-content {
+  border-radius: 16px;
+}
+
+.search-provider-icon,
+.app-folder-dialog .folder-name-container {
+  border-radius: 12px;
+}
+
+.workspace-thumbnail {
+  border-radius: 13px;
+}
+
+#lookingGlassDialog {
+  color: #F8EFFF;
+  background-color: #120C25;
+  border: 1px solid rgba(96, 64, 110, 0.78);
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+.popup-menu-item .popup-menu-icon {
+  color: #6FE7F7;
+}
+
+.keyboard-brightness-level .button:checked,
+.quick-toggle:checked {
+  box-shadow: inset 0 0 0 1px rgba(46, 216, 232, 0.48);
+}
+
+
+
+/* ── Tela Circle integration ─────────────────────────────────────────── */
+.app-well-app .overview-icon,
+.show-apps .overview-icon,
+.app-folder .overview-icon,
+.grid-search-result .overview-icon,
+.dash-item-container .overview-icon {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border-radius: 999px !important;
+  /* background-color: rgba(46, 216, 232, 0.20) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow:
+    0 0 0 155px rgba(46, 216, 232, 0.17),
+    inset 0 0 0 155px rgba(46, 216, 232, 0.68),
+    inset 0 0 0 155px rgba(140, 92, 255, 0.14) !important; */
+}
+
+.app-well-app:hover .overview-icon,
+.app-well-app:focus .overview-icon,
+.show-apps:hover .overview-icon,
+.app-folder:hover .overview-icon,
+.grid-search-result:hover .overview-icon,
+.dash-item-container:hover .overview-icon {
+  /* background-color: rgba(46, 216, 232, 0.11) !important; */
+  /* box-shadow: inset 0 0 0 50px rgba(46, 216, 232, 0.24), inset 0 0 0 55px rgba(96, 64, 110, 0.78) !important; */
+  /* border-radius: 999px !important; */
+  background-color: rgba(46, 216, 232, 0.20) !important;
+  background-image: none !important;
+  border: 0 !important;
+  /* border: 1px rgba(96, 64, 110, 0.82) !important; */
+  /* border-color: rgba(96, 64, 110, 0.82) !important; */
+  border-radius: 999px !important;
+  /* box-shadow: inset 0 0 0 5px rgba(46, 216, 232, 0.17), inset 0 0 0 5px rgba(46, 216, 232, 0.68) !important; */
+  /* border-width: 1px !important; */
+  /* border-color: rgba(96, 64, 110, 0.78) !important; */  
+  /* border: 2px solid rgba(96, 64, 110, 0.78) !important; */
+  box-shadow: 0 0 0 55px rgba(46, 216, 232, 0.68), inset 0 0 0 50px rgba(96, 64, 110, 0.78), inset 0 0 0 50px rgba(46, 216, 232, 0.68) !important;
+}
+
+/* NOVA_TRUE_SQUIRCLE_START */
+/* SVG superellipse: visually closer to Apple's continuous corner than a circular CSS radius. */
+.app-folder-dialog {
+  background-color: transparent;
+  background-image: url("assets/app-folder-squircle.svg") !important;
+  background-size: 100% 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* NOVA_TRUE_SQUIRCLE_END */
+
+/* NOVA_HOVER_START */
+/* Fedora Nova hover mode: circle; stable icon-bin halo */
+/* The outer tile contains the label, so keep it visually empty. */
+/* .overview-tile,
+.overview-tile:hover,
+.overview-tile:focus,
+.overview-tile:selected,
+.overview-tile:active,
+.overview-tile:checked,
+.overview-tile:outlined,
+.overview-tile.app-folder,
+.overview-tile.app-folder:hover,
+.overview-tile.app-folder:focus,
+.overview-tile.app-folder:selected,
+.overview-tile.app-folder:active,
+.overview-tile.app-folder:checked,
+.overview-tile.app-folder:outlined {
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+} */
+
+.overview-tile:hover,
+.overview-tile:focus,
+.overview-tile:selected,
+.overview-tile:active,
+.overview-tile:checked,
+.overview-tile:outlined,
+.overview-tile.app-folder,
+.overview-tile.app-folder:hover,
+.overview-tile.app-folder:focus,
+.overview-tile.app-folder:selected,
+.overview-tile.app-folder:active,
+.overview-tile.app-folder:checked,
+.overview-tile.app-folder:outlined {
+  background-color: rgba(46, 216, 232, 0.18) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow:
+    0 0 0 55px rgba(46, 216, 232, 0.15),
+    inset 0 0 0 55px rgba(46, 216, 232, 0.62),
+    inset 0 0 0 55px rgba(140, 92, 255, 0.12) !important;
+}
+
+#dashtodockContainer #dash .overview-tile:hover,
+#dashtodockContainer #dash .overview-tile:focus,
+#dashtodockContainer #dash .overview-tile:selected,
+#dashtodockContainer #dash .overview-tile:active,
+#dashtodockContainer #dash .overview-tile:checked,
+#dashtodockContainer #dash .overview-tile:outlined,
+#dashtodockContainer #dash .overview-tile.app-folder,
+#dashtodockContainer #dash .overview-tile.app-folder:hover,
+#dashtodockContainer #dash .overview-tile.app-folder:focus,
+#dashtodockContainer #dash .overview-tile.app-folder:selected,
+#dashtodockContainer #dash .overview-tile.app-folder:active,
+#dashtodockContainer #dash .overview-tile.app-folder:checked,
+#dashtodockContainer #dash .overview-tile.app-folder:outlined {
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+
+/* BaseIcon contains icon-bin and label. Keep the wrapper transparent. */
+/* .overview-tile .overview-icon,
+.overview-tile:hover .overview-icon,
+.overview-tile:focus .overview-icon,
+.overview-tile:selected .overview-icon,
+.overview-tile:active .overview-icon,
+.overview-tile:checked .overview-icon,
+.overview-tile:outlined .overview-icon,
+.overview-tile.focused .overview-icon,
+.overview-tile .overview-icon:hover,
+.overview-tile .overview-icon:focus,
+.overview-tile .overview-icon:selected,
+.overview-tile .overview-icon:active,
+.overview-tile .overview-icon:checked,
+.overview-tile .overview-icon:outlined,
+.overview-tile .overview-icon.focused {
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+} */
+
+/* Dash to Dock v105 paints $remark_color directly on .overview-icon.
+ * Override that exact layer and keep Fedora Nova in control of the dock. */
+#dashtodockContainer #dash .dash-background,
+#dashtodockContainer.dashtodock #dash .dash-background,
+#dashtodockContainer.bottom #dash .dash-background,
+#dashtodockContainer.top #dash .dash-background,
+#dashtodockContainer.left #dash .dash-background,
+#dashtodockContainer.right #dash .dash-background {
+  background-color: rgba(9, 8, 27, 0.94) !important;
+  border-color: rgba(96, 64, 110, 0.82) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.34) !important;
+}
+
+/* #dashtodockContainer #dash .dash-item-container .overview-icon,
+#dashtodockContainer #dash .dash-item-container:hover .overview-icon,
+#dashtodockContainer #dash .dash-item-container:focus .overview-icon {
+  background-color: rgba(9, 8, 27, 0.94) !important;
+  border-color: rgba(96, 64, 110, 0.82) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.34) !important;
+} */
+
+/* .dash-item-container .overview-icon,
+.dash-item-container:hover .overview-icon,
+.dash-item-container:focus .overview-icon,
+.dash-item-container:selected .overview-icon,
+.dash-item-container:active .overview-icon,
+.dash-item-container:checked .overview-icon,
+.dash-item-container:outlined .overview-icon,
+.dash-item-container.focused .overview-icon,
+.dash-item-container .overview-icon:hover,
+.dash-item-container .overview-icon:focus,
+.dash-item-container .overview-icon:selected,
+.dash-item-container .overview-icon:active,
+.dash-item-container .overview-icon:checked,
+.dash-item-container .overview-icon:outlined,
+.dash-item-container .overview-icon.focused,
+.dash-item-container .overview-tile .overview-icon,
+.dash-item-container .overview-tile:hover .overview-icon,
+.dash-item-container .overview-tile:focus .overview-icon,
+.dash-item-container .overview-tile:selected .overview-icon,
+.dash-item-container .overview-tile:active .overview-icon,
+.dash-item-container .overview-tile:checked .overview-icon,
+.dash-item-container .overview-tile:outlined .overview-icon,
+.dash-item-container .overview-tile.focused .overview-icon,
+.dash-item-container .app-well-app .overview-icon,
+.dash-item-container .app-well-app:hover .overview-icon,
+.dash-item-container .app-well-app:focus .overview-icon,
+.dash-item-container .app-well-app:selected .overview-icon,
+.dash-item-container .app-well-app:active .overview-icon,
+.dash-item-container .app-well-app:checked .overview-icon,
+.dash-item-container .app-well-app:outlined .overview-icon,
+.dash-item-container .app-well-app.focused .overview-icon,
+.dash-item-container .show-apps .overview-icon,
+.dash-item-container .show-apps:hover .overview-icon,
+.dash-item-container .show-apps:focus .overview-icon,
+.dash-item-container .show-apps:selected .overview-icon,
+.dash-item-container .show-apps:active .overview-icon,
+.dash-item-container .show-apps:checked .overview-icon,
+.dash-item-container .show-apps:outlined .overview-icon,
+.dash-item-container .show-apps.focused .overview-icon,
+#dash .dash-item-container .overview-icon,
+#dash .dash-item-container:hover .overview-icon,
+#dash .dash-item-container:focus .overview-icon,
+#dash .dash-item-container:selected .overview-icon,
+#dash .dash-item-container:active .overview-icon,
+#dash .dash-item-container:checked .overview-icon,
+#dash .dash-item-container:outlined .overview-icon,
+#dash .dash-item-container.focused .overview-icon,
+#dash .dash-item-container .overview-icon:hover,
+#dash .dash-item-container .overview-icon:focus,
+#dash .dash-item-container .overview-icon:selected,
+#dash .dash-item-container .overview-icon:active,
+#dash .dash-item-container .overview-icon:checked,
+#dash .dash-item-container .overview-icon:outlined,
+#dash .dash-item-container .overview-icon.focused,
+#dash .dash-item-container .overview-tile .overview-icon,
+#dash .dash-item-container .overview-tile:hover .overview-icon,
+#dash .dash-item-container .overview-tile:focus .overview-icon,
+#dash .dash-item-container .overview-tile:selected .overview-icon,
+#dash .dash-item-container .overview-tile:active .overview-icon,
+#dash .dash-item-container .overview-tile:checked .overview-icon,
+#dash .dash-item-container .overview-tile:outlined .overview-icon,
+#dash .dash-item-container .overview-tile.focused .overview-icon,
+#dash .dash-item-container .app-well-app .overview-icon,
+#dash .dash-item-container .app-well-app:hover .overview-icon,
+#dash .dash-item-container .app-well-app:focus .overview-icon,
+#dash .dash-item-container .app-well-app:selected .overview-icon,
+#dash .dash-item-container .app-well-app:active .overview-icon,
+#dash .dash-item-container .app-well-app:checked .overview-icon,
+#dash .dash-item-container .app-well-app:outlined .overview-icon,
+#dash .dash-item-container .app-well-app.focused .overview-icon,
+#dash .dash-item-container .show-apps .overview-icon,
+#dash .dash-item-container .show-apps:hover .overview-icon,
+#dash .dash-item-container .show-apps:focus .overview-icon,
+#dash .dash-item-container .show-apps:selected .overview-icon,
+#dash .dash-item-container .show-apps:active .overview-icon,
+#dash .dash-item-container .show-apps:checked .overview-icon,
+#dash .dash-item-container .show-apps:outlined .overview-icon,
+#dash .dash-item-container .show-apps.focused .overview-icon,
+#dashtodockContainer .dash-item-container .overview-icon,
+#dashtodockContainer .dash-item-container:hover .overview-icon,
+#dashtodockContainer .dash-item-container:focus .overview-icon,
+#dashtodockContainer .dash-item-container:selected .overview-icon,
+#dashtodockContainer .dash-item-container:active .overview-icon,
+#dashtodockContainer .dash-item-container:checked .overview-icon,
+#dashtodockContainer .dash-item-container:outlined .overview-icon,
+#dashtodockContainer .dash-item-container.focused .overview-icon,
+#dashtodockContainer .dash-item-container .overview-icon:hover,
+#dashtodockContainer .dash-item-container .overview-icon:focus,
+#dashtodockContainer .dash-item-container .overview-icon:selected,
+#dashtodockContainer .dash-item-container .overview-icon:active,
+#dashtodockContainer .dash-item-container .overview-icon:checked,
+#dashtodockContainer .dash-item-container .overview-icon:outlined,
+#dashtodockContainer .dash-item-container .overview-icon.focused,
+#dashtodockContainer .dash-item-container .overview-tile .overview-icon,
+#dashtodockContainer .dash-item-container .overview-tile:hover .overview-icon,
+#dashtodockContainer .dash-item-container .overview-tile:focus .overview-icon,
+#dashtodockContainer .dash-item-container .overview-tile:selected .overview-icon,
+#dashtodockContainer .dash-item-container .overview-tile:active .overview-icon,
+#dashtodockContainer .dash-item-container .overview-tile:checked .overview-icon,
+#dashtodockContainer .dash-item-container .overview-tile:outlined .overview-icon,
+#dashtodockContainer .dash-item-container .overview-tile.focused .overview-icon,
+#dashtodockContainer .dash-item-container .app-well-app .overview-icon,
+#dashtodockContainer .dash-item-container .app-well-app:hover .overview-icon,
+#dashtodockContainer .dash-item-container .app-well-app:focus .overview-icon,
+#dashtodockContainer .dash-item-container .app-well-app:selected .overview-icon,
+#dashtodockContainer .dash-item-container .app-well-app:active .overview-icon,
+#dashtodockContainer .dash-item-container .app-well-app:checked .overview-icon,
+#dashtodockContainer .dash-item-container .app-well-app:outlined .overview-icon,
+#dashtodockContainer .dash-item-container .app-well-app.focused .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps:hover .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps:focus .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps:selected .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps:active .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps:checked .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps:outlined .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps.focused .overview-icon,
+#dashtodockContainer #dash .dash-item-container .overview-icon,
+#dashtodockContainer #dash .dash-item-container:hover .overview-icon,
+#dashtodockContainer #dash .dash-item-container:focus .overview-icon,
+#dashtodockContainer #dash .dash-item-container:selected .overview-icon,
+#dashtodockContainer #dash .dash-item-container:active .overview-icon,
+#dashtodockContainer #dash .dash-item-container:checked .overview-icon,
+#dashtodockContainer #dash .dash-item-container:outlined .overview-icon,
+#dashtodockContainer #dash .dash-item-container.focused .overview-icon,
+#dashtodockContainer #dash .dash-item-container .overview-icon:hover,
+#dashtodockContainer #dash .dash-item-container .overview-icon:focus,
+#dashtodockContainer #dash .dash-item-container .overview-icon:selected,
+#dashtodockContainer #dash .dash-item-container .overview-icon:active,
+#dashtodockContainer #dash .dash-item-container .overview-icon:checked,
+#dashtodockContainer #dash .dash-item-container .overview-icon:outlined,
+#dashtodockContainer #dash .dash-item-container .overview-icon.focused,
+#dashtodockContainer #dash .dash-item-container .overview-tile .overview-icon,
+#dashtodockContainer #dash .dash-item-container .overview-tile:hover .overview-icon,
+#dashtodockContainer #dash .dash-item-container .overview-tile:focus .overview-icon,
+#dashtodockContainer #dash .dash-item-container .overview-tile:selected .overview-icon,
+#dashtodockContainer #dash .dash-item-container .overview-tile:active .overview-icon,
+#dashtodockContainer #dash .dash-item-container .overview-tile:checked .overview-icon,
+#dashtodockContainer #dash .dash-item-container .overview-tile:outlined .overview-icon,
+#dashtodockContainer #dash .dash-item-container .overview-tile.focused .overview-icon,
+#dashtodockContainer #dash .dash-item-container .app-well-app .overview-icon,
+#dashtodockContainer #dash .dash-item-container .app-well-app:hover .overview-icon,
+#dashtodockContainer #dash .dash-item-container .app-well-app:focus .overview-icon,
+#dashtodockContainer #dash .dash-item-container .app-well-app:selected .overview-icon,
+#dashtodockContainer #dash .dash-item-container .app-well-app:active .overview-icon,
+#dashtodockContainer #dash .dash-item-container .app-well-app:checked .overview-icon,
+#dashtodockContainer #dash .dash-item-container .app-well-app:outlined .overview-icon,
+#dashtodockContainer #dash .dash-item-container .app-well-app.focused .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps:hover .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps:focus .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps:selected .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps:active .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps:checked .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps:outlined .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps.focused .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:hover .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:focus .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:selected .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:active .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:checked .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:outlined .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container.focused .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:hover,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:focus,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:selected,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:active,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:checked,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:outlined,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon.focused,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:hover .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:focus .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:selected .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:active .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:checked .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:outlined .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile.focused .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:hover .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:focus .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:selected .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:active .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:checked .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:outlined .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app.focused .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:hover .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:focus .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:selected .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:active .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:checked .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:outlined .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps.focused .overview-icon {
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+} */
+
+/* A nearly transparent fill is intentional: St needs a painted background
+ * to render a reliable box-shadow. Geometry never changes on hover. */
+/* .overview-tile .overview-icon > StBoxLayout > StBin,
+.dash-item-container .overview-icon > StBoxLayout > StBin,
+.dash-item-container .overview-tile .overview-icon > StBoxLayout > StBin,
+.dash-item-container .app-well-app .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .overview-tile .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .app-well-app .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-tile .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .app-well-app .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-tile .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .app-well-app .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app .overview-icon > StBoxLayout > StBin {
+  background-color: rgba(0, 0, 0, 0.01) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+  transition-duration: 100ms;
+} */
+
+/* App grid: large external halo, especially visible around visually small
+ * icons such as Files. No padding or margin changes. */
+/* .overview-tile:hover .overview-icon > StBoxLayout > StBin,
+.overview-tile:focus .overview-icon > StBoxLayout > StBin,
+.overview-tile:selected .overview-icon > StBoxLayout > StBin,
+.overview-tile:active .overview-icon > StBoxLayout > StBin,
+.overview-tile:checked .overview-icon > StBoxLayout > StBin,
+.overview-tile:outlined .overview-icon > StBoxLayout > StBin,
+.overview-tile.focused .overview-icon > StBoxLayout > StBin,
+.overview-tile .overview-icon:hover > StBoxLayout > StBin,
+.overview-tile .overview-icon:focus > StBoxLayout > StBin,
+.overview-tile .overview-icon:selected > StBoxLayout > StBin,
+.overview-tile .overview-icon:active > StBoxLayout > StBin,
+.overview-tile .overview-icon:checked > StBoxLayout > StBin,
+.overview-tile .overview-icon:outlined > StBoxLayout > StBin,
+.overview-tile .overview-icon.focused > StBoxLayout > StBin {
+  background-color: rgba(46, 216, 232, 0.18) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow:
+    0 0 0 155px rgba(46, 216, 232, 0.15),
+    inset 0 0 0 155px rgba(46, 216, 232, 0.62),
+    inset 0 0 0 155px rgba(140, 92, 255, 0.12) !important;
+} */
+
+
+/* .dash-item-container .overview-icon:hover > StBoxLayout > StBin,
+.dash-item-container .overview-icon:focus > StBoxLayout > StBin,
+.dash-item-container .overview-icon:selected > StBoxLayout > StBin,
+.dash-item-container .overview-icon:active > StBoxLayout > StBin,
+.dash-item-container .overview-icon:checked > StBoxLayout > StBin,
+.dash-item-container .overview-icon:outlined > StBoxLayout > StBin,
+.dash-item-container .overview-icon.focused > StBoxLayout > StBin,
+.dash-item-container .overview-tile:hover .overview-icon > StBoxLayout > StBin,
+.dash-item-container .overview-tile:focus .overview-icon > StBoxLayout > StBin,
+.dash-item-container .overview-tile:selected .overview-icon > StBoxLayout > StBin,
+.dash-item-container .overview-tile:active .overview-icon > StBoxLayout > StBin,
+.dash-item-container .overview-tile:checked .overview-icon > StBoxLayout > StBin,
+.dash-item-container .overview-tile:outlined .overview-icon > StBoxLayout > StBin,
+.dash-item-container .overview-tile.focused .overview-icon > StBoxLayout > StBin */
+/* .dash-item-container .app-well-app:hover .overview-icon > StBoxLayout > StBin,
+.dash-item-container .app-well-app:focus .overview-icon > StBoxLayout > StBin,
+.dash-item-container .app-well-app:selected .overview-icon > StBoxLayout > StBin,
+.dash-item-container .app-well-app:active .overview-icon > StBoxLayout > StBin,
+.dash-item-container .app-well-app:checked .overview-icon > StBoxLayout > StBin,
+.dash-item-container .app-well-app:outlined .overview-icon > StBoxLayout > StBin,
+.dash-item-container .app-well-app.focused .overview-icon > StBoxLayout > StBin */
+/* #dash .dash-item-container .app-well-app:hover .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .app-well-app:focus .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .app-well-app:selected .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .app-well-app:active .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .app-well-app:checked .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .app-well-app:outlined .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .app-well-app.focused .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .app-well-app:hover .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .app-well-app:focus .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .app-well-app:selected .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .app-well-app:active .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .app-well-app:checked .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .app-well-app:outlined .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .app-well-app.focused .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .app-well-app:hover .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .app-well-app:focus .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .app-well-app:selected .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .app-well-app:active .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .app-well-app:checked .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .app-well-app:outlined .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .app-well-app.focused .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:hover .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:focus .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:selected .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:active .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:checked .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app:outlined .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .app-well-app.focused .overview-icon > StBoxLayout > StBin, */
+/* #dash .dash-item-container:hover .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container:focus .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container:selected .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container:active .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container:checked .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container:outlined .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container.focused .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .overview-icon:hover > StBoxLayout > StBin,
+#dash .dash-item-container .overview-icon:focus > StBoxLayout > StBin,
+#dash .dash-item-container .overview-icon:selected > StBoxLayout > StBin,
+#dash .dash-item-container .overview-icon:active > StBoxLayout > StBin,
+#dash .dash-item-container .overview-icon:checked > StBoxLayout > StBin,
+#dash .dash-item-container .overview-icon:outlined > StBoxLayout > StBin,
+#dash .dash-item-container .overview-icon.focused > StBoxLayout > StBin,
+#dash .dash-item-container .overview-tile:hover .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .overview-tile:focus .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .overview-tile:selected .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .overview-tile:active .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .overview-tile:checked .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .overview-tile:outlined .overview-icon > StBoxLayout > StBin,
+#dash .dash-item-container .overview-tile.focused .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container:hover .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container:focus .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container:selected .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container:active .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container:checked .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container:outlined .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container.focused .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-icon:hover > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-icon:focus > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-icon:selected > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-icon:active > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-icon:checked > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-icon:outlined > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-icon.focused > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-tile:hover .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-tile:focus .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-tile:selected .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-tile:active .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-tile:checked .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-tile:outlined .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer .dash-item-container .overview-tile.focused .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container:hover .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container:focus .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container:selected .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container:active .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container:checked .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container:outlined .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container.focused .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-icon:hover > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-icon:focus > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-icon:selected > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-icon:active > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-icon:checked > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-icon:outlined > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-icon.focused > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-tile:hover .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-tile:focus .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-tile:selected .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-tile:active .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-tile:checked .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-tile:outlined .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer #dash .dash-item-container .overview-tile.focused .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container:hover .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container:focus .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container:selected .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container:active .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container:checked .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container:outlined .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container.focused .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:hover > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:focus > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:selected > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:active > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:checked > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon:outlined > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-icon.focused > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:hover .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:focus .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:selected .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:active .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:checked .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile:outlined .overview-icon > StBoxLayout > StBin,
+#dashtodockContainer.dashtodock #dash .dash-item-container .overview-tile.focused .overview-icon > StBoxLayout > StBin {
+  border: 0 !important;
+} */
+
+/* Dock has less free space, so use a smaller but still colored halo. */
+.dash-item-container:hover .overview-icon > StBoxLayout > StBin,
+.dash-item-container:focus .overview-icon > StBoxLayout > StBin,
+.dash-item-container:selected .overview-icon > StBoxLayout > StBin,
+.dash-item-container:active .overview-icon > StBoxLayout > StBin,
+.dash-item-container:checked .overview-icon > StBoxLayout > StBin,
+.dash-item-container:outlined .overview-icon > StBoxLayout > StBin,
+.dash-item-container.focused .overview-icon > StBoxLayout > StBin {
+  background-color: rgba(46, 216, 232, 0.20) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow:
+    0 0 0 55px rgba(46, 216, 232, 0.17),
+    inset 0 0 0 55px rgba(46, 216, 232, 0.68),
+    inset 0 0 0 55px rgba(140, 92, 255, 0.14) !important;
+}
+
+/* Show Applications has no BaseIcon StBin label structure. */
+/* .dash-item-container .show-apps:hover .overview-icon,
+.dash-item-container .show-apps:focus .overview-icon,
+.dash-item-container .show-apps:selected .overview-icon,
+.dash-item-container .show-apps:active .overview-icon,
+.dash-item-container .show-apps:checked .overview-icon,
+.dash-item-container .show-apps:outlined .overview-icon,
+.dash-item-container .show-apps.focused .overview-icon,
+.dash-item-container:hover .show-apps .overview-icon,
+.dash-item-container:focus .show-apps .overview-icon,
+.dash-item-container:selected .show-apps .overview-icon,
+.dash-item-container:active .show-apps .overview-icon,
+.dash-item-container:checked .show-apps .overview-icon,
+.dash-item-container:outlined .show-apps .overview-icon,
+.dash-item-container.focused .show-apps .overview-icon,
+.dash-item-container .show-apps .overview-icon:hover,
+.dash-item-container .show-apps .overview-icon:focus,
+.dash-item-container .show-apps .overview-icon:selected,
+.dash-item-container .show-apps .overview-icon:active,
+.dash-item-container .show-apps .overview-icon:checked,
+.dash-item-container .show-apps .overview-icon:outlined,
+.dash-item-container .show-apps .overview-icon.focused,
+#dash .dash-item-container .show-apps:hover .overview-icon,
+#dash .dash-item-container .show-apps:focus .overview-icon,
+#dash .dash-item-container .show-apps:selected .overview-icon,
+#dash .dash-item-container .show-apps:active .overview-icon,
+#dash .dash-item-container .show-apps:checked .overview-icon,
+#dash .dash-item-container .show-apps:outlined .overview-icon,
+#dash .dash-item-container .show-apps.focused .overview-icon,
+#dash .dash-item-container:hover .show-apps .overview-icon,
+#dash .dash-item-container:focus .show-apps .overview-icon,
+#dash .dash-item-container:selected .show-apps .overview-icon,
+#dash .dash-item-container:active .show-apps .overview-icon,
+#dash .dash-item-container:checked .show-apps .overview-icon,
+#dash .dash-item-container:outlined .show-apps .overview-icon,
+#dash .dash-item-container.focused .show-apps .overview-icon,
+#dash .dash-item-container .show-apps .overview-icon:hover,
+#dash .dash-item-container .show-apps .overview-icon:focus,
+#dash .dash-item-container .show-apps .overview-icon:selected,
+#dash .dash-item-container .show-apps .overview-icon:active,
+#dash .dash-item-container .show-apps .overview-icon:checked,
+#dash .dash-item-container .show-apps .overview-icon:outlined,
+#dash .dash-item-container .show-apps .overview-icon.focused,
+#dashtodockContainer .dash-item-container .show-apps:hover .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps:focus .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps:selected .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps:active .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps:checked .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps:outlined .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps.focused .overview-icon,
+#dashtodockContainer .dash-item-container:hover .show-apps .overview-icon,
+#dashtodockContainer .dash-item-container:focus .show-apps .overview-icon,
+#dashtodockContainer .dash-item-container:selected .show-apps .overview-icon,
+#dashtodockContainer .dash-item-container:active .show-apps .overview-icon,
+#dashtodockContainer .dash-item-container:checked .show-apps .overview-icon,
+#dashtodockContainer .dash-item-container:outlined .show-apps .overview-icon,
+#dashtodockContainer .dash-item-container.focused .show-apps .overview-icon,
+#dashtodockContainer .dash-item-container .show-apps .overview-icon:hover,
+#dashtodockContainer .dash-item-container .show-apps .overview-icon:focus,
+#dashtodockContainer .dash-item-container .show-apps .overview-icon:selected,
+#dashtodockContainer .dash-item-container .show-apps .overview-icon:active,
+#dashtodockContainer .dash-item-container .show-apps .overview-icon:checked,
+#dashtodockContainer .dash-item-container .show-apps .overview-icon:outlined,
+#dashtodockContainer .dash-item-container .show-apps .overview-icon.focused,
+#dashtodockContainer #dash .dash-item-container .show-apps:hover .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps:focus .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps:selected .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps:active .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps:checked .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps:outlined .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps.focused .overview-icon,
+#dashtodockContainer #dash .dash-item-container:hover .show-apps .overview-icon,
+#dashtodockContainer #dash .dash-item-container:focus .show-apps .overview-icon,
+#dashtodockContainer #dash .dash-item-container:selected .show-apps .overview-icon,
+#dashtodockContainer #dash .dash-item-container:active .show-apps .overview-icon,
+#dashtodockContainer #dash .dash-item-container:checked .show-apps .overview-icon,
+#dashtodockContainer #dash .dash-item-container:outlined .show-apps .overview-icon,
+#dashtodockContainer #dash .dash-item-container.focused .show-apps .overview-icon,
+#dashtodockContainer #dash .dash-item-container .show-apps .overview-icon:hover,
+#dashtodockContainer #dash .dash-item-container .show-apps .overview-icon:focus,
+#dashtodockContainer #dash .dash-item-container .show-apps .overview-icon:selected,
+#dashtodockContainer #dash .dash-item-container .show-apps .overview-icon:active,
+#dashtodockContainer #dash .dash-item-container .show-apps .overview-icon:checked,
+#dashtodockContainer #dash .dash-item-container .show-apps .overview-icon:outlined,
+#dashtodockContainer #dash .dash-item-container .show-apps .overview-icon.focused,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:hover .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:focus .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:selected .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:active .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:checked .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps:outlined .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps.focused .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:hover .show-apps .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:focus .show-apps .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:selected .show-apps .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:active .show-apps .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:checked .show-apps .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container:outlined .show-apps .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container.focused .show-apps .overview-icon,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps .overview-icon:hover,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps .overview-icon:focus,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps .overview-icon:selected,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps .overview-icon:active,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps .overview-icon:checked,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps .overview-icon:outlined,
+#dashtodockContainer.dashtodock #dash .dash-item-container .show-apps .overview-icon.focused {
+  background-color: rgba(46, 216, 232, 0.20) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow:
+    0 0 0 5px rgba(46, 216, 232, 0.17),
+    inset 0 0 0 2px rgba(46, 216, 232, 0.68) !important;
+} */
+
+/* .dash-item-container .show-apps:hover .overview-icon,
+#dash .dash-item-container:hover .overview-icon {
+  box-shadow: 0 0 0 2px rgba(46, 216, 232, 0.68) !important;
+}*/
+
+/* Never paint the icon texture or folder miniature itself. */
+/* .overview-tile .overview-icon > StBoxLayout > StBin > StIcon,
+.overview-tile .overview-icon > StBoxLayout > StBin > StWidget {
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+} */
+
+/* .dash-item-container .overview-tile:hover .overview-icon,
+.dash-item-container .overview-tile.focused .overview-icon,
+.dash-item-container .show-apps:hover .overview-icon {
+  background-color: rgba(46, 216, 232, 0.68) !important;
+  border-radius: 999px !important;
+} */
+/* NOVA_HOVER_END */
+
+/* NOVA_CURVE_START */
+/* Fedora Nova 0.6 — Continuous Curve layer
+ * preset: squircle
+ *
+ * GNOME Shell does not expose Apple's private continuous-corner primitive.
+ * This approximates it using large outer radii, proportionally smaller
+ * nested radii, consistent icon plates and preserved true circles.
+ */
+
+#panel .panel-button,
+#panel .panel-button.clock-display .clock {
+  border-radius: 14px;
+}
+
+.quick-settings,
+.datemenu-popover,
+.popup-menu-content,
+.candidate-popup-content,
+.app-folder-dialog,
+.switcher-list,
+.workspace-switcher,
+.screenshot-ui-panel,
+#lookingGlassDialog {
+  border-radius: 32px;
+}
+
+.modal-dialog,
+.osd-window {
+  border-radius: 30px;
+}
+
+.notification-banner {
+  border-radius: 24px;
+}
+
+.quick-toggle-menu,
+.datemenu-today-button,
+.calendar,
+.events-button,
+.world-clocks-button,
+.weather-button,
+.message,
+.media-message,
+.search-section-content,
+.workspace-thumbnail,
+.window-caption {
+  border-radius: 24px;
+}
+
+.popup-menu-item,
+.popup-sub-menu,
+.quick-toggle,
+.quick-toggle-has-menu,
+.quick-toggle-menu .header .icon,
+.calendar .calendar-month-header .calendar-month-label,
+.calendar .calendar-month-header .pager-button,
+.message-list-clear-button,
+.message-media-control,
+.modal-dialog-linked-button,
+.search-entry,
+.search-provider-icon,
+.app-folder-dialog .folder-name-container,
+.switcher-list .item-box,
+.screenshot-ui-type-button,
+.button {
+  border-radius: 17px;
+}
+
+.app-well-app .overview-icon,
+.show-apps .overview-icon,
+.app-folder .overview-icon,
+.grid-search-result .overview-icon,
+.search-provider-icon,
+.dash-item-container .overview-icon {
+  border-radius: 20px;
+}
+
+#dash .dash-background,
+#dashtodockContainer #dash .dash-background,
+.dash-to-dock .dash-background {
+  border-radius: 30px;
+}
+
+.dash-label,
+.tooltip,
+.workspace-thumbnail .window-caption {
+  border-radius: 13px;
+}
+
+.quick-toggle-has-menu .quick-toggle:ltr {
+  border-radius: 17px 0 0 17px;
+}
+.quick-toggle-has-menu .quick-toggle:rtl {
+  border-radius: 0 17px 17px 0;
+}
+.quick-toggle-has-menu .quick-toggle-menu-button:ltr {
+  border-radius: 0 17px 17px 0;
+}
+.quick-toggle-has-menu .quick-toggle-menu-button:rtl {
+  border-radius: 17px 0 0 17px;
+}
+
+.app-folder,
+.app-folder-dialog .folder-name-container,
+.workspace-thumbnail {
+  border-radius: 24px;
+}
+
+.calendar .calendar-day,
+.quick-settings-system-item .icon-button,
+.quick-settings-system-item .power-item,
+.screenshot-ui-capture-button,
+.toggle-switch,
+.avatar,
+.user-icon,
+#panel #panelActivities .workspace-dot,
+.app-grid-running-dot,
+.app-well-app-running-dot {
+  border-radius: 999px;
+}
+
+.slider {
+  -slider-handle-radius: 10px;
+}
+/* NOVA_CURVE_END */

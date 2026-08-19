@@ -1,0 +1,20 @@
+# Fedora 44 / GNOME 50 packages used by Fedora Nova.
+# Blur My Shell is deliberately not required or enabled.
+gnome-tweaks
+gnome-extensions-app
+gnome-shell-extension-user-theme
+gnome-shell-extension-dash-to-dock
+mutter-devkit
+inotify-tools
+papirus-icon-theme
+papirus-icon-theme-dark
+rsms-inter-fonts
+jetbrains-mono-fonts
+fastfetch
+ptyxis
+zenity
+python3
+python3-gobject
+gtk4
+libadwaita
+python3-pillow

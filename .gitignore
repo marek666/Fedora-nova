@@ -1,0 +1,14 @@
+
+/_build/
+/build/
+/.dev-build/
+/.flatpak-builder/
+/repo/
+/subprojects/packagecache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.cache/
+.idea/
+.vscode/
+.DS_Store

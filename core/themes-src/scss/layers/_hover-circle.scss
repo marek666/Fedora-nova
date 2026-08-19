@@ -1,0 +1,269 @@
+@mixin nova-hover-clear-icon-wrapper {
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+@mixin nova-hover-icon-bin-base {
+  background-color: rgba(0, 0, 0, 0.01) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+  transition-duration: 100ms;
+}
+
+@mixin nova-hover-grid-halo {
+  background-color: nova-rgba(accent, 0.18) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow:
+    0 0 0 10px nova-rgba(accent, 0.15),
+    inset 0 0 0 2px nova-rgba(accent, 0.62),
+    inset 0 0 0 3px nova-rgba(secondary, 0.12) !important;
+}
+
+@mixin nova-hover-dock-halo {
+  background-color: nova-rgba(accent, 0.20) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow:
+    0 0 0 5px nova-rgba(accent, 0.17),
+    inset 0 0 0 2px nova-rgba(accent, 0.68),
+    inset 0 0 0 3px nova-rgba(secondary, 0.14) !important;
+}
+
+@mixin nova-hover-show-apps-halo {
+  background-color: nova-rgba(accent, 0.20) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow:
+    0 0 0 5px nova-rgba(accent, 0.17),
+    inset 0 0 0 2px nova-rgba(accent, 0.68) !important;
+}
+
+@mixin nova-hover-circle-layer {
+/* NOVA_HOVER_START */
+/* Fedora Nova hover mode: circle; stable icon-bin halo */
+
+$nova-hover-pseudos: ":hover", ":focus", ":selected", ":active", ":checked", ":outlined";
+$nova-dock-roots:
+  ".dash-item-container",
+  "#dash .dash-item-container",
+  "#dashtodockContainer .dash-item-container",
+  "#dashtodockContainer #dash .dash-item-container",
+  "#dashtodockContainer.dashtodock #dash .dash-item-container";
+$nova-dock-children: ".overview-tile", ".app-well-app", ".show-apps";
+$nova-dock-icon-children: ".overview-tile", ".app-well-app";
+
+/* The outer tile contains the label, so keep it visually empty. */
+.overview-tile,
+.overview-tile:hover,
+.overview-tile:focus,
+.overview-tile:selected,
+.overview-tile:active,
+.overview-tile:checked,
+.overview-tile:outlined,
+.overview-tile.app-folder,
+.overview-tile.app-folder:hover,
+.overview-tile.app-folder:focus,
+.overview-tile.app-folder:selected,
+.overview-tile.app-folder:active,
+.overview-tile.app-folder:checked,
+.overview-tile.app-folder:outlined {
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* BaseIcon contains icon-bin and label. Keep the wrapper transparent. */
+.overview-tile .overview-icon {
+  @include nova-hover-clear-icon-wrapper;
+}
+
+@each $pseudo in $nova-hover-pseudos {
+  .overview-tile#{$pseudo} .overview-icon,
+  .overview-tile .overview-icon#{$pseudo} {
+    @include nova-hover-clear-icon-wrapper;
+  }
+}
+
+.overview-tile.focused .overview-icon,
+.overview-tile .overview-icon.focused {
+  @include nova-hover-clear-icon-wrapper;
+}
+
+/* Dash to Dock can paint hover on the item, the app actor, or the icon itself. */
+#dashtodockContainer #dash .dash-background,
+#dashtodockContainer.dashtodock #dash .dash-background,
+#dashtodockContainer.bottom #dash .dash-background,
+#dashtodockContainer.top #dash .dash-background,
+#dashtodockContainer.left #dash .dash-background,
+#dashtodockContainer.right #dash .dash-background {
+  background-color: nova-rgba(dock-color, 0.94) !important;
+  border-color: nova-rgba(border, 0.82) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.34) !important;
+}
+
+@each $root in $nova-dock-roots {
+  #{$root} .overview-icon {
+    @include nova-hover-clear-icon-wrapper;
+  }
+
+  @each $pseudo in $nova-hover-pseudos {
+    #{$root}#{$pseudo} .overview-icon,
+    #{$root} .overview-icon#{$pseudo} {
+      @include nova-hover-clear-icon-wrapper;
+    }
+  }
+
+  #{$root}.focused .overview-icon,
+  #{$root} .overview-icon.focused {
+    @include nova-hover-clear-icon-wrapper;
+  }
+
+  @each $child in $nova-dock-children {
+    #{$root} #{$child} .overview-icon {
+      @include nova-hover-clear-icon-wrapper;
+    }
+
+    @each $pseudo in $nova-hover-pseudos {
+      #{$root} #{$child}#{$pseudo} .overview-icon {
+        @include nova-hover-clear-icon-wrapper;
+      }
+    }
+
+    #{$root} #{$child}.focused .overview-icon {
+      @include nova-hover-clear-icon-wrapper;
+    }
+  }
+}
+
+/* A nearly transparent fill is intentional: St needs a painted background
+ * to render a reliable box-shadow. Geometry never changes on hover. */
+.overview-tile .overview-icon > StBoxLayout > StBin {
+  @include nova-hover-icon-bin-base;
+}
+
+@each $root in $nova-dock-roots {
+  #{$root} .overview-icon > StBoxLayout > StBin {
+    @include nova-hover-icon-bin-base;
+  }
+
+  @each $child in $nova-dock-icon-children {
+    #{$root} #{$child} .overview-icon > StBoxLayout > StBin {
+      @include nova-hover-icon-bin-base;
+    }
+  }
+}
+
+/* App grid: large external halo, especially visible around visually small
+ * icons such as Files. No padding or margin changes. */
+@each $pseudo in $nova-hover-pseudos {
+  .overview-tile#{$pseudo} .overview-icon > StBoxLayout > StBin,
+  .overview-tile .overview-icon#{$pseudo} > StBoxLayout > StBin {
+    @include nova-hover-grid-halo;
+  }
+}
+
+.overview-tile.focused .overview-icon > StBoxLayout > StBin,
+.overview-tile .overview-icon.focused > StBoxLayout > StBin {
+  @include nova-hover-grid-halo;
+}
+
+/* Dock has less free space, so use a smaller but still colored halo. */
+@each $root in $nova-dock-roots {
+  @each $pseudo in $nova-hover-pseudos {
+    #{$root}#{$pseudo} .overview-icon > StBoxLayout > StBin,
+    #{$root} .overview-icon#{$pseudo} > StBoxLayout > StBin {
+      @include nova-hover-dock-halo;
+    }
+  }
+
+  #{$root}.focused .overview-icon > StBoxLayout > StBin,
+  #{$root} .overview-icon.focused > StBoxLayout > StBin {
+    @include nova-hover-dock-halo;
+  }
+
+  @each $child in $nova-dock-icon-children {
+    @each $pseudo in $nova-hover-pseudos {
+      #{$root} #{$child}#{$pseudo} .overview-icon > StBoxLayout > StBin {
+        @include nova-hover-dock-halo;
+      }
+    }
+
+    #{$root} #{$child}.focused .overview-icon > StBoxLayout > StBin {
+      @include nova-hover-dock-halo;
+    }
+  }
+}
+
+/* Show Applications has no BaseIcon StBin label structure. */
+@each $root in $nova-dock-roots {
+  @each $pseudo in $nova-hover-pseudos {
+    #{$root} .show-apps#{$pseudo} .overview-icon,
+    #{$root}#{$pseudo} .show-apps .overview-icon,
+    #{$root} .show-apps .overview-icon#{$pseudo} {
+      @include nova-hover-show-apps-halo;
+    }
+  }
+
+  #{$root} .show-apps.focused .overview-icon,
+  #{$root}.focused .show-apps .overview-icon,
+  #{$root} .show-apps .overview-icon.focused {
+    @include nova-hover-show-apps-halo;
+  }
+}
+
+/* Never paint the icon texture or folder miniature itself. */
+.overview-tile .overview-icon > StBoxLayout > StBin > StIcon,
+.overview-tile .overview-icon > StBoxLayout > StBin > StWidget {
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+@for $i from 2 through 4 {
+  #dashtodockContainer.bottom .metro.running#{$i}.focused,
+  #dashtodockContainer.top .metro.running#{$i}.focused {
+      background-image: none !important;
+      background-position: 0px 0px;
+      background-size: contain;
+  }
+
+  #dashtodockContainer.left .metro.running#{$i}.focused,
+  #dashtodockContainer.right .metro.running#{$i}.focused {
+      background-image: none !important;
+      background-position: 0px 0px;
+      background-size: contain;
+  }
+}
+
+@each $root in $nova-dock-roots {
+  #{$root} .overview-icon > StBoxLayout > StBin > StIcon,
+  #{$root} .overview-icon > StBoxLayout > StBin > StWidget {
+    background-color: transparent !important;
+    background-image: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  @each $child in $nova-dock-icon-children {
+    #{$root} #{$child} .overview-icon > StBoxLayout > StBin > StIcon,
+    #{$root} #{$child} .overview-icon > StBoxLayout > StBin > StWidget {
+      background-color: transparent !important;
+      background-image: none !important;
+      border: 0 !important;
+      box-shadow: none !important;
+    }
+  }
+}
+/* NOVA_HOVER_END */
+}

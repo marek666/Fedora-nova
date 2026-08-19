@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Fedora Nova Settings
+GenericName=Desktop Appearance Settings
+Comment=Hover ikon, GTK barvy, Steam ikony, profily a více monitorů
+Exec=fedora-nova settings
+Icon=fedora-nova
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=theme;GNOME;Fedora;Nova;vzhled;icons;color;monitor;
+StartupNotify=true

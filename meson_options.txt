@@ -1,0 +1,7 @@
+
+option(
+  'developer_mode',
+  type: 'boolean',
+  value: true,
+  description: 'Enable Fedora Nova development helpers',
+)

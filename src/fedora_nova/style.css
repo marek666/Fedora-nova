@@ -1,0 +1,173 @@
+
+@define-color nova_bg #08091B;
+@define-color nova_panel #050817;
+@define-color nova_large #120C25;
+@define-color nova_surface #21133A;
+@define-color nova_surface2 #2B1749;
+@define-color nova_card #2A1C3D;
+@define-color nova_accent #2ED8E8;
+@define-color nova_accent_bright #6FE7F7;
+@define-color nova_accent_fg #06131A;
+@define-color nova_secondary #8C5CFF;
+@define-color nova_text #F8EFFF;
+@define-color nova_muted #B5A2C4;
+@define-color nova_border #60406E;
+
+window {
+  background-color: @nova_bg;
+  color: @nova_text;
+}
+
+headerbar {
+  background-color: alpha(@nova_panel, 0.96);
+  color: @nova_text;
+  border-color: alpha(@nova_accent, 0.18);
+}
+
+.background,
+preferencespage,
+preferencesgroup {
+  background-color: @nova_bg;
+}
+
+.navigation-sidebar {
+  background-color: alpha(@nova_panel, 0.74);
+}
+
+.navigation-sidebar row {
+  border-radius: 12px;
+  margin: 2px 0;
+  color: @nova_muted;
+}
+
+.navigation-sidebar row:selected {
+  background-color: alpha(@nova_accent, 0.20);
+  box-shadow: inset 0 0 0 1px alpha(@nova_accent_bright, 0.45);
+  color: @nova_text;
+}
+
+.color-swatch {
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px alpha(@window_fg_color, 0.20);
+}
+
+.system-host-banner {
+  background-color: alpha(@warning_bg_color, 0.18);
+  color: @warning_fg_color;
+}
+
+.nova-preview-frame {
+  background-color: @nova_panel;
+  border: 1px solid alpha(@nova_accent_bright, 0.24);
+  border-radius: 8px;
+  box-shadow: 0 18px 40px alpha(black, 0.38);
+  margin: 6px 12px 12px;
+}
+
+.nova-preview-wallpaper-fallback {
+  background-color: @nova_large;
+  background-image: linear-gradient(to bottom, @nova_surface2, @nova_panel);
+}
+
+.nova-preview-shell {
+  padding: 10px;
+}
+
+.nova-preview-topbar {
+  min-height: 30px;
+  padding: 0 12px;
+  background-color: alpha(@nova_panel, 0.90);
+  border: 1px solid alpha(@nova_accent, 0.22);
+  border-radius: 8px;
+  box-shadow: 0 8px 22px alpha(black, 0.30);
+}
+
+.nova-preview-brand,
+.nova-preview-status {
+  color: @nova_muted;
+  font-size: 0.86em;
+}
+
+.nova-preview-clock {
+  padding: 4px 12px;
+  color: @nova_text;
+  background-color: alpha(@nova_secondary, 0.24);
+  border: 1px solid alpha(@nova_accent, 0.38);
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.nova-preview-workspace {
+  padding: 0 18px;
+}
+
+.nova-preview-side {
+  min-width: 34px;
+  padding: 12px 8px;
+  background-color: alpha(@nova_panel, 0.58);
+  border: 1px solid alpha(@nova_border, 0.30);
+  border-radius: 8px;
+}
+
+.nova-preview-dot {
+  min-width: 12px;
+  min-height: 12px;
+  border-radius: 8px;
+  background-color: alpha(@nova_accent, 0.30);
+}
+
+.nova-preview-dot.active {
+  min-width: 24px;
+  background-color: @nova_accent;
+  box-shadow: 0 0 14px alpha(@nova_accent_bright, 0.45);
+}
+
+.nova-preview-window {
+  padding: 10px;
+  background-color: alpha(@nova_large, 0.86);
+  border: 1px solid alpha(@nova_border, 0.42);
+  border-radius: 8px;
+  box-shadow: 0 18px 36px alpha(black, 0.34);
+}
+
+.nova-preview-window-header {
+  min-height: 22px;
+}
+
+.nova-preview-control {
+  min-width: 46px;
+  min-height: 10px;
+  border-radius: 8px;
+  background-color: alpha(@nova_muted, 0.26);
+}
+
+.nova-preview-card {
+  border-radius: 8px;
+  background-color: alpha(@nova_surface, 0.82);
+  border-left: 4px solid @nova_accent;
+}
+
+.nova-preview-card.secondary {
+  border-left-color: @nova_secondary;
+  background-color: alpha(@nova_surface2, 0.78);
+}
+
+.nova-preview-dock {
+  padding: 8px 12px;
+  background-color: alpha(@nova_panel, 0.88);
+  border: 1px solid alpha(@nova_border, 0.38);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px alpha(black, 0.36);
+}
+
+.nova-preview-dock-icon {
+  min-width: 26px;
+  min-height: 26px;
+  border-radius: 8px;
+  background-color: @nova_accent;
+  box-shadow: inset 0 0 0 1px alpha(white, 0.20);
+}
+
+.nova-preview-dock-icon.secondary {
+  background-color: @nova_secondary;
+}
