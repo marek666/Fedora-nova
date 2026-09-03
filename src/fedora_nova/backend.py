@@ -118,27 +118,40 @@ class Backend:
                 helper = str(candidate)
         return helper
 
+    @staticmethod
+    def _preview_supervisor_matches(pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
+        except OSError:
+            return False
+        return (
+            b"dev-shell-preview.sh" in cmdline
+            or b"fedora-nova-shell-preview" in cmdline
+        )
+
     def shell_preview_running(self) -> bool:
         if self.in_flatpak:
             result = self._host_shell(
-                'pidfile="${XDG_CACHE_HOME:-$HOME/.cache}/fedora-nova-shell-preview/live.pid"; '
+                'pidfile="${XDG_CACHE_HOME:-$HOME/.cache}/fedora-nova-shell-preview/runtime/supervisor.pid"; '
                 '[ -s "$pidfile" ] || exit 1; '
                 'pid="$(cat "$pidfile")"; '
                 'case "$pid" in ""|*[!0-9]*) exit 1;; esac; '
-                'kill -0 "$pid" 2>/dev/null'
+                'kill -0 "$pid" 2>/dev/null || exit 1; '
+                'grep -aq -e "dev-shell-preview.sh" -e "fedora-nova-shell-preview" '
+                '"/proc/$pid/cmdline" 2>/dev/null'
             )
             return result.ok
 
         pidfile = (
             Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-            / "fedora-nova-shell-preview/live.pid"
+            / "fedora-nova-shell-preview/runtime/supervisor.pid"
         )
         try:
             pid = int(pidfile.read_text(encoding="utf-8").strip())
-            os.kill(pid, 0)
         except (OSError, ValueError):
             return False
-        return True
+        return self._preview_supervisor_matches(pid)
 
     def launch_shell_preview(self, profile: str, watch: bool = False) -> CommandResult:
         if watch and self.shell_preview_running():
