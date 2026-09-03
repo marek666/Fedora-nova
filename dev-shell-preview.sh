@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ORIGINAL_ARGS=("$@")
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
 ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)"
 CORE="$ROOT/core"
@@ -19,6 +20,7 @@ SUPERVISOR_PID_FILE="$RUNTIME_DIR/supervisor.pid"
 SESSION_PID_FILE="$RUNTIME_DIR/session.pid"
 SESSION_PGID_FILE="$RUNTIME_DIR/session.pgid"
 SESSION_META_FILE="$RUNTIME_DIR/session.env"
+TOKEN_FILE="$RUNTIME_DIR/preview.token"
 
 SHELL_PID=""
 SHELL_PGID=""
@@ -54,6 +56,19 @@ while (($#)); do
   shift
 done
 
+# Re-exec once with a per-preview token in the initial process environment.
+# /proc/<pid>/environ can then distinguish our supervisor/session from a
+# recycled PID without relying on the script filename or symlink name.
+if [[ $STOP -ne 1 && -z "${NOVA_PREVIEW_TOKEN:-}" ]]; then
+  if [[ ! -r /proc/sys/kernel/random/uuid ]]; then
+    echo "CHYBA: nelze vytvořit bezpečný identifikátor Shell Preview." >&2
+    exit 1
+  fi
+  preview_uuid="$(</proc/sys/kernel/random/uuid)"
+  export NOVA_PREVIEW_TOKEN="${preview_uuid//-/}"
+  exec "$SCRIPT_PATH" "${ORIGINAL_ARGS[@]}"
+fi
+
 is_pid() {
   [[ "${1:-}" =~ ^[0-9]+$ ]]
 }
@@ -63,6 +78,13 @@ read_pid_file() {
   local value=""
   [[ -s "$path" ]] && value="$(<"$path")"
   is_pid "$value" && printf '%s\n' "$value"
+  return 0
+}
+
+read_token_file() {
+  local value=""
+  [[ -s "$TOKEN_FILE" ]] && value="$(<"$TOKEN_FILE")"
+  [[ "$value" =~ ^[0-9a-fA-F]{32}$ ]] && printf '%s\n' "$value"
   return 0
 }
 
@@ -78,6 +100,35 @@ process_matches() {
   is_pid "$pid" || return 1
   kill -0 "$pid" 2>/dev/null || return 1
   process_cmdline "$pid" 2>/dev/null | grep -Fq -- "$pattern"
+}
+
+process_has_token() {
+  local pid="$1"
+  local token="$2"
+  is_pid "$pid" || return 1
+  [[ "$token" =~ ^[0-9a-fA-F]{32}$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  [[ -r "/proc/$pid/environ" ]] || return 1
+  tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null |
+    grep -Fxq -- "NOVA_PREVIEW_TOKEN=$token"
+}
+
+supervisor_matches_token() {
+  local pid="$1"
+  local token="$2"
+  process_has_token "$pid" "$token"
+}
+
+session_matches_token() {
+  local pid="$1"
+  local token="$2"
+  process_matches "$pid" "dbus-run-session" && process_has_token "$pid" "$token"
+}
+
+legacy_supervisor_matches() {
+  local pid="$1"
+  process_matches "$pid" "dev-shell-preview.sh" ||
+    process_matches "$pid" "fedora-nova-shell-preview"
 }
 
 current_pgid() {
@@ -99,22 +150,38 @@ safe_kill_group() {
   kill -s "$signal" -- "-$pgid" 2>/dev/null || true
 }
 
+write_runtime_token() {
+  mkdir -p "$RUNTIME_DIR"
+  (
+    umask 077
+    printf '%s\n' "$NOVA_PREVIEW_TOKEN" > "$TOKEN_FILE"
+  )
+}
+
 clear_session_metadata() {
   rm -f "$SESSION_PID_FILE" "$SESSION_PGID_FILE" "$SESSION_META_FILE"
 }
 
 stop_recorded_session() {
-  local pid pgid actual_pgid
+  local pid pgid actual_pgid token
   pid="$(read_pid_file "$SESSION_PID_FILE")"
   pgid="$(read_pid_file "$SESSION_PGID_FILE")"
+  token="$(read_token_file)"
 
   if [[ -z "$pid" || -z "$pgid" ]]; then
     clear_session_metadata
     return 0
   fi
 
-  # Avoid killing an unrelated process if a stale PID has been recycled.
-  if ! process_matches "$pid" "dbus-run-session"; then
+  # New sessions must carry the exact recorded token. For one upgrade cycle,
+  # keep the old dbus-run-session + PGID check as a compatibility fallback
+  # when metadata predates preview.token.
+  if [[ -n "$token" ]]; then
+    if ! session_matches_token "$pid" "$token"; then
+      clear_session_metadata
+      return 0
+    fi
+  elif ! process_matches "$pid" "dbus-run-session"; then
     clear_session_metadata
     return 0
   fi
@@ -138,11 +205,18 @@ stop_recorded_session() {
 }
 
 stop_external_preview() {
-  local supervisor
+  local supervisor token
   supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
+  token="$(read_token_file)"
 
-  if [[ -n "$supervisor" ]] && process_matches "$supervisor" "dev-shell-preview.sh"; then
-    kill -TERM "$supervisor" 2>/dev/null || true
+  if [[ -n "$supervisor" ]]; then
+    if [[ -n "$token" ]] && supervisor_matches_token "$supervisor" "$token"; then
+      kill -TERM "$supervisor" 2>/dev/null || true
+    elif [[ -z "$token" ]] && legacy_supervisor_matches "$supervisor"; then
+      # Compatibility with metadata written before tokenized lifecycle.
+      kill -TERM "$supervisor" 2>/dev/null || true
+    fi
+
     for _ in {1..40}; do
       kill -0 "$supervisor" 2>/dev/null || break
       sleep 0.1
@@ -152,7 +226,7 @@ stop_external_preview() {
   # If the supervisor was killed abruptly, clean up its nested session too.
   stop_recorded_session
   rm -rf "$LIVE_LOCK_DIR"
-  rm -f "$SUPERVISOR_PID_FILE"
+  rm -f "$SUPERVISOR_PID_FILE" "$TOKEN_FILE"
   echo "Shell Preview zastaveno."
 }
 
@@ -230,30 +304,41 @@ acquire_live_lock() {
 
   if mkdir "$LIVE_LOCK_DIR" 2>/dev/null; then
     printf '%s\n' "$$" > "$SUPERVISOR_PID_FILE"
+    write_runtime_token
     return 0
   fi
 
-  local supervisor
+  local supervisor recorded_token
   supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
-  if [[ -n "$supervisor" ]] && process_matches "$supervisor" "dev-shell-preview.sh"; then
-    echo "Shell Preview už běží. Zavři jeho okno nebo spusť ./dev-shell-preview.sh --stop." >&2
-    exit 2
+  recorded_token="$(read_token_file)"
+
+  if [[ -n "$supervisor" ]]; then
+    if [[ -n "$recorded_token" ]] && supervisor_matches_token "$supervisor" "$recorded_token"; then
+      echo "Shell Preview už běží. Zavři jeho okno nebo spusť ./dev-shell-preview.sh --stop." >&2
+      exit 2
+    fi
+    if [[ -z "$recorded_token" ]] && legacy_supervisor_matches "$supervisor"; then
+      echo "Shell Preview už běží. Zavři jeho okno nebo spusť ./dev-shell-preview.sh --stop." >&2
+      exit 2
+    fi
   fi
 
-  # Stale lock after a crash. Clean only a session that still matches our
-  # recorded dbus-run-session PID/PGID pair.
+  # Stale lock after a crash. Clean only a recorded session that still matches
+  # its token (or legacy dbus-run-session metadata during the transition).
   stop_recorded_session
   rm -rf "$LIVE_LOCK_DIR"
   mkdir "$LIVE_LOCK_DIR"
   printf '%s\n' "$$" > "$SUPERVISOR_PID_FILE"
+  write_runtime_token
 }
 
 release_live_lock() {
-  local supervisor
+  local supervisor token
   supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
-  if [[ "$supervisor" == "$$" ]]; then
+  token="$(read_token_file)"
+  if [[ "$supervisor" == "$$" && "$token" == "${NOVA_PREVIEW_TOKEN:-}" ]]; then
     rm -rf "$LIVE_LOCK_DIR"
-    rm -f "$SUPERVISOR_PID_FILE"
+    rm -f "$SUPERVISOR_PID_FILE" "$TOKEN_FILE"
   fi
 }
 
@@ -442,17 +527,28 @@ exec gnome-shell --devkit --wayland
 '
 
 record_session_metadata() {
-  local started_at
+  local started_at mode
   started_at="$(date --iso-8601=seconds 2>/dev/null || date)"
+  mode="once"
+  [[ $WATCH -eq 1 ]] && mode="watch"
+
   printf '%s\n' "$SHELL_PID" > "$SESSION_PID_FILE"
   printf '%s\n' "$SHELL_PGID" > "$SESSION_PGID_FILE"
-  cat > "$SESSION_META_FILE" <<EOF
-supervisor_pid=$$
-session_pid=$SHELL_PID
-process_group_id=$SHELL_PGID
-profile=$PROFILE
-started_at=$started_at
-EOF
+  (
+    umask 077
+    {
+      printf 'format_version=2\n'
+      printf 'preview_token=%q\n' "$NOVA_PREVIEW_TOKEN"
+      printf 'supervisor_pid=%q\n' "$$"
+      printf 'session_pid=%q\n' "$SHELL_PID"
+      printf 'process_group_id=%q\n' "$SHELL_PGID"
+      printf 'profile=%q\n' "$PROFILE"
+      printf 'mode=%q\n' "$mode"
+      printf 'repo_root=%q\n' "$ROOT"
+      printf 'preview_root=%q\n' "$PREVIEW_ROOT"
+      printf 'started_at=%q\n' "$started_at"
+    } > "$SESSION_META_FILE"
+  )
 }
 
 start_shell() {
@@ -483,6 +579,7 @@ start_shell() {
 stop_shell() {
   local pid="${SHELL_PID:-}"
   local pgid="${SHELL_PGID:-}"
+  local token="${NOVA_PREVIEW_TOKEN:-}"
 
   if ! is_pid "$pid"; then
     pid="$(read_pid_file "$SESSION_PID_FILE")"
@@ -490,8 +587,11 @@ stop_shell() {
   if ! is_pid "$pgid"; then
     pgid="$(read_pid_file "$SESSION_PGID_FILE")"
   fi
+  if [[ -z "$token" ]]; then
+    token="$(read_token_file)"
+  fi
 
-  if [[ -n "$pid" && -n "$pgid" ]] && process_matches "$pid" "dbus-run-session"; then
+  if [[ -n "$pid" && -n "$pgid" && -n "$token" ]] && session_matches_token "$pid" "$token"; then
     safe_kill_group "$pgid" TERM
     for _ in {1..40}; do
       kill -0 "$pid" 2>/dev/null || break
