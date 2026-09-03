@@ -9,11 +9,18 @@ PROFILE="tech"
 WATCH=0
 STOP=0
 
-PREVIEW_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/fedora-nova-shell-preview"
+ORIGINAL_HOME="${HOME:?}"
+ORIGINAL_XDG_DATA_HOME="${XDG_DATA_HOME:-$ORIGINAL_HOME/.local/share}"
+ORIGINAL_XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+
+PREVIEW_ROOT="${XDG_CACHE_HOME:-$ORIGINAL_HOME/.cache}/fedora-nova-shell-preview"
+PREVIEW_HOME="$PREVIEW_ROOT/home"
 PREVIEW_CONFIG="$PREVIEW_ROOT/config"
 PREVIEW_DATA="$PREVIEW_ROOT/data"
 PREVIEW_CACHE="$PREVIEW_ROOT/cache"
 PREVIEW_STATE="$PREVIEW_ROOT/state"
+PREVIEW_HOST_EXPORT="$PREVIEW_ROOT/host-export"
+PREVIEW_FLATPAK_EXPORT="$PREVIEW_ROOT/flatpak-export"
 RUNTIME_DIR="$PREVIEW_ROOT/runtime"
 LIVE_LOCK_DIR="$PREVIEW_ROOT/live.lock"
 SUPERVISOR_PID_FILE="$RUNTIME_DIR/supervisor.pid"
@@ -22,6 +29,7 @@ SESSION_PGID_FILE="$RUNTIME_DIR/session.pgid"
 SESSION_META_FILE="$RUNTIME_DIR/session.env"
 TOKEN_FILE="$RUNTIME_DIR/preview.token"
 
+PREVIEW_XDG_DATA_DIRS=""
 SHELL_PID=""
 SHELL_PGID=""
 WATCH_PID=""
@@ -40,8 +48,8 @@ Examples:
   ./dev-shell-preview.sh --watch tech
   ./dev-shell-preview.sh --stop
 
-The preview runs in an isolated XDG + D-Bus session. In --watch mode the
-nested GNOME Shell is restarted when anything under core/ changes.
+The preview runs in an isolated HOME, XDG and D-Bus session. In --watch mode
+the nested GNOME Shell is restarted when anything under core/ changes.
 The host GNOME session is untouched.
 USAGE
 }
@@ -296,8 +304,67 @@ if [[ -d "$TOPBAR_SOURCE" ]]; then
 fi
 ENABLED+="]"
 
-ORIGINAL_XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
-ORIGINAL_XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+append_preview_data_dir() {
+  local candidate="$1"
+  [[ -n "$candidate" && -d "$candidate" ]] || return 0
+  case ":$PREVIEW_XDG_DATA_DIRS:" in
+    *":$candidate:"*) return 0 ;;
+  esac
+  if [[ -n "$PREVIEW_XDG_DATA_DIRS" ]]; then
+    PREVIEW_XDG_DATA_DIRS+=":"
+  fi
+  PREVIEW_XDG_DATA_DIRS+="$candidate"
+}
+
+build_preview_data_dirs() {
+  local candidate
+  local -a host_dirs=()
+
+  PREVIEW_XDG_DATA_DIRS=""
+  append_preview_data_dir "$PREVIEW_HOST_EXPORT"
+  append_preview_data_dir "$PREVIEW_FLATPAK_EXPORT"
+
+  IFS=':' read -r -a host_dirs <<< "$ORIGINAL_XDG_DATA_DIRS"
+  for candidate in "${host_dirs[@]}"; do
+    [[ -n "$candidate" ]] || continue
+    case "$candidate" in
+      "$ORIGINAL_HOME"|"$ORIGINAL_HOME"/*) continue ;;
+    esac
+    append_preview_data_dir "$candidate"
+  done
+
+  # Keep the normal Fedora system lookup path even if the host environment was
+  # customized, and expose system-wide Flatpak exports when installed.
+  append_preview_data_dir "/var/lib/flatpak/exports/share"
+  append_preview_data_dir "/usr/local/share"
+  append_preview_data_dir "/usr/share"
+}
+
+prepare_export_view() {
+  local source="$1"
+  local target="$2"
+  local item
+
+  rm -rf "$target"
+  mkdir -p "$target"
+  [[ -d "$source" ]] || return 0
+
+  # Explicit allowlist: applications can stay launchable and their icons/mime
+  # data remain visible, but themes and gnome-shell/extensions are never
+  # exposed from the host user data directory.
+  for item in applications icons mime metainfo; do
+    if [[ -e "$source/$item" ]]; then
+      ln -s "$source/$item" "$target/$item"
+    fi
+  done
+}
+
+prepare_host_exports() {
+  local user_flatpak_share="$ORIGINAL_HOME/.local/share/flatpak/exports/share"
+  prepare_export_view "$ORIGINAL_XDG_DATA_HOME" "$PREVIEW_HOST_EXPORT"
+  prepare_export_view "$user_flatpak_share" "$PREVIEW_FLATPAK_EXPORT"
+  build_preview_data_dirs
+}
 
 acquire_live_lock() {
   mkdir -p "$PREVIEW_ROOT" "$RUNTIME_DIR"
@@ -375,10 +442,11 @@ PY
 }
 
 prepare_preview_root() {
-  # Runtime metadata lives outside these generated/session directories so a
-  # restart cannot erase the information needed to stop a stale session.
+  # Runtime metadata and the isolated HOME live outside these generated/session
+  # directories, so restarts can be cheapened later without weakening isolation.
   rm -rf "$PREVIEW_CONFIG" "$PREVIEW_DATA" "$PREVIEW_CACHE" "$PREVIEW_STATE"
   mkdir -p \
+    "$PREVIEW_HOME" \
     "$PREVIEW_CONFIG" \
     "$PREVIEW_CONFIG/autostart" \
     "$PREVIEW_CONFIG/fedora-nova" \
@@ -389,6 +457,9 @@ prepare_preview_root() {
     "$PREVIEW_CACHE" \
     "$PREVIEW_STATE" \
     "$RUNTIME_DIR"
+  chmod 700 "$PREVIEW_HOME"
+
+  prepare_host_exports
 
   cp -a "$CORE/themes/." "$PREVIEW_DATA/themes/"
   cp -a "$CORE/assets/wallpapers/." "$PREVIEW_DATA/backgrounds/fedora-nova/"
@@ -443,14 +514,12 @@ EOF
 }
 
 export_preview_env() {
+  export HOME="$PREVIEW_HOME"
   export XDG_CONFIG_HOME="$PREVIEW_CONFIG"
   export XDG_DATA_HOME="$PREVIEW_DATA"
   export XDG_CACHE_HOME="$PREVIEW_CACHE"
   export XDG_STATE_HOME="$PREVIEW_STATE"
-
-  # Host applications remain discoverable for now. Extension isolation will
-  # be tightened separately so that this lifecycle change stays low-risk.
-  export XDG_DATA_DIRS="$ORIGINAL_XDG_DATA_HOME:$ORIGINAL_XDG_DATA_DIRS"
+  export XDG_DATA_DIRS="$PREVIEW_XDG_DATA_DIRS"
 
   # The nested development session does not need accessibility bridging by
   # default. Set NOVA_PREVIEW_A11Y=1 to test accessibility explicitly.
@@ -479,6 +548,7 @@ print_banner() {
   echo "Shell theme: $THEME"
   echo "Wallpaper:   $WALLPAPER"
   echo "Izolace:     $PREVIEW_ROOT"
+  echo "Home:        izolovaný"
   if [[ $WATCH -eq 1 ]]; then
     echo "Live:        zapnuto"
   fi
@@ -537,7 +607,7 @@ record_session_metadata() {
   (
     umask 077
     {
-      printf 'format_version=2\n'
+      printf 'format_version=3\n'
       printf 'preview_token=%q\n' "$NOVA_PREVIEW_TOKEN"
       printf 'supervisor_pid=%q\n' "$$"
       printf 'session_pid=%q\n' "$SHELL_PID"
@@ -546,6 +616,8 @@ record_session_metadata() {
       printf 'mode=%q\n' "$mode"
       printf 'repo_root=%q\n' "$ROOT"
       printf 'preview_root=%q\n' "$PREVIEW_ROOT"
+      printf 'preview_home=%q\n' "$PREVIEW_HOME"
+      printf 'xdg_data_dirs=%q\n' "$PREVIEW_XDG_DATA_DIRS"
       printf 'started_at=%q\n' "$started_at"
     } > "$SESSION_META_FILE"
   )
