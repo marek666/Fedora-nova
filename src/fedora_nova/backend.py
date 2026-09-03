@@ -125,10 +125,17 @@ class Backend:
             cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
         except OSError:
             return False
-        return (
-            b"dev-shell-preview.sh" in cmdline
-            or b"fedora-nova-shell-preview" in cmdline
-        )
+        markers = {"dev-shell-preview.sh", "fedora-nova-shell-preview"}
+        for raw_arg in cmdline.split(b"\0"):
+            if not raw_arg:
+                continue
+            try:
+                arg = os.fsdecode(raw_arg)
+            except UnicodeError:
+                continue
+            if Path(arg).name in markers:
+                return True
+        return False
 
     def shell_preview_running(self) -> bool:
         if self.in_flatpak:
@@ -138,8 +145,8 @@ class Backend:
                 'pid="$(cat "$pidfile")"; '
                 'case "$pid" in ""|*[!0-9]*) exit 1;; esac; '
                 'kill -0 "$pid" 2>/dev/null || exit 1; '
-                'grep -aq -e "dev-shell-preview.sh" -e "fedora-nova-shell-preview" '
-                '"/proc/$pid/cmdline" 2>/dev/null'
+                'tr "\\0" "\\n" < "/proc/$pid/cmdline" 2>/dev/null | '
+                'grep -Eq "(^|/)(dev-shell-preview\\.sh|fedora-nova-shell-preview)$"'
             )
             return result.ok
 
