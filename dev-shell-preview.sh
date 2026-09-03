@@ -10,6 +10,8 @@ WATCH=0
 STOP=0
 
 ORIGINAL_HOME="${HOME:?}"
+ORIGINAL_HOME_REAL="$(readlink -m -- "$ORIGINAL_HOME")"
+ORIGINAL_PATH="${PATH:-/usr/local/bin:/usr/bin:/bin}"
 ORIGINAL_XDG_DATA_HOME="${XDG_DATA_HOME:-$ORIGINAL_HOME/.local/share}"
 ORIGINAL_XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
@@ -412,7 +414,7 @@ ERR
   exit 1
 fi
 
-for command_name in dbus-run-session setsid ps grep tr python3; do
+for command_name in dbus-run-session setsid ps grep tr python3 readlink; do
   command -v "$command_name" >/dev/null 2>&1 || {
     echo "CHYBA: chybí $command_name." >&2
     exit 1
@@ -458,20 +460,27 @@ if [[ -d "$TOPBAR_SOURCE" ]]; then
 fi
 ENABLED+="]"
 
+canonical_data_dir() {
+  local candidate="$1"
+  [[ -n "$candidate" && -d "$candidate" ]] || return 1
+  readlink -m -- "$candidate"
+}
+
 append_preview_data_dir() {
   local candidate="$1"
-  [[ -n "$candidate" && -d "$candidate" ]] || return 0
+  local canonical=""
+  canonical="$(canonical_data_dir "$candidate")" || return 0
   case ":$PREVIEW_XDG_DATA_DIRS:" in
-    *":$candidate:"*) return 0 ;;
+    *":$canonical:"*) return 0 ;;
   esac
   if [[ -n "$PREVIEW_XDG_DATA_DIRS" ]]; then
     PREVIEW_XDG_DATA_DIRS+=":"
   fi
-  PREVIEW_XDG_DATA_DIRS+="$candidate"
+  PREVIEW_XDG_DATA_DIRS+="$canonical"
 }
 
 build_preview_data_dirs() {
-  local candidate
+  local candidate canonical
   local -a host_dirs=()
 
   PREVIEW_XDG_DATA_DIRS=""
@@ -481,10 +490,11 @@ build_preview_data_dirs() {
   IFS=':' read -r -a host_dirs <<< "$ORIGINAL_XDG_DATA_DIRS"
   for candidate in "${host_dirs[@]}"; do
     [[ -n "$candidate" ]] || continue
-    case "$candidate" in
-      "$ORIGINAL_HOME"|"$ORIGINAL_HOME"/*) continue ;;
+    canonical="$(canonical_data_dir "$candidate")" || continue
+    case "$canonical" in
+      "$ORIGINAL_HOME_REAL"|"$ORIGINAL_HOME_REAL"/*) continue ;;
     esac
-    append_preview_data_dir "$candidate"
+    append_preview_data_dir "$canonical"
   done
 
   append_preview_data_dir "/var/lib/flatpak/exports/share"
@@ -670,6 +680,7 @@ EOF
 
 export_preview_env() {
   export HOME="$PREVIEW_HOME"
+  export PATH="$ORIGINAL_PATH"
   export XDG_CONFIG_HOME="$PREVIEW_CONFIG"
   export XDG_DATA_HOME="$PREVIEW_DATA"
   export XDG_CACHE_HOME="$PREVIEW_CACHE"
@@ -768,7 +779,7 @@ record_session_metadata() {
   write_pid_file "$SHELL_CHILD_PID_FILE" "$SHELL_CHILD_PID"
 
   {
-    printf 'format_version=4\n'
+    printf 'format_version=5\n'
     printf 'preview_token=%q\n' "$NOVA_PREVIEW_TOKEN"
     printf 'supervisor_pid=%q\n' "$$"
     printf 'session_pid=%q\n' "$SHELL_PID"
@@ -779,6 +790,7 @@ record_session_metadata() {
     printf 'repo_root=%q\n' "$ROOT"
     printf 'preview_root=%q\n' "$PREVIEW_ROOT"
     printf 'preview_home=%q\n' "$PREVIEW_HOME"
+    printf 'path=%q\n' "$ORIGINAL_PATH"
     printf 'xdg_data_dirs=%q\n' "$PREVIEW_XDG_DATA_DIRS"
     printf 'started_at=%q\n' "$started_at"
   } | atomic_write_file "$SESSION_META_FILE" 600
@@ -791,7 +803,9 @@ start_shell() {
   print_banner
 
   rm -f "$SHELL_CHILD_PID_FILE"
-  setsid dbus-run-session -- bash -lc "$SESSION_SCRIPT" &
+  # A non-login shell preserves the explicitly prepared preview environment.
+  # We intentionally do not source /etc/profile or files from PREVIEW_HOME.
+  setsid dbus-run-session -- bash -c "$SESSION_SCRIPT" &
   SHELL_PID=$!
 
   SHELL_PGID=""
