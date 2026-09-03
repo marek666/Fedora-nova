@@ -26,12 +26,14 @@ LIVE_LOCK_DIR="$PREVIEW_ROOT/live.lock"
 SUPERVISOR_PID_FILE="$RUNTIME_DIR/supervisor.pid"
 SESSION_PID_FILE="$RUNTIME_DIR/session.pid"
 SESSION_PGID_FILE="$RUNTIME_DIR/session.pgid"
+SHELL_CHILD_PID_FILE="$RUNTIME_DIR/shell.pid"
 SESSION_META_FILE="$RUNTIME_DIR/session.env"
 TOKEN_FILE="$RUNTIME_DIR/preview.token"
 
 PREVIEW_XDG_DATA_DIRS=""
 SHELL_PID=""
 SHELL_PGID=""
+SHELL_CHILD_PID=""
 WATCH_PID=""
 
 usage() {
@@ -64,21 +66,33 @@ while (($#)); do
   shift
 done
 
-# Re-exec once with a per-preview token in the initial process environment.
-# /proc/<pid>/environ can then distinguish our supervisor/session from a
-# recycled PID without relying on the script filename or symlink name.
-if [[ $STOP -ne 1 && -z "${NOVA_PREVIEW_TOKEN:-}" ]]; then
-  if [[ ! -r /proc/sys/kernel/random/uuid ]]; then
-    echo "CHYBA: nelze vytvořit bezpečný identifikátor Shell Preview." >&2
+# Bootstrap a token we generated ourselves. An externally supplied
+# NOVA_PREVIEW_TOKEN must never be enough to skip token creation.
+if [[ $STOP -ne 1 ]]; then
+  if [[ "${NOVA_PREVIEW_TOKEN_BOOTSTRAPPED:-0}" != "1" ]]; then
+    if [[ ! -r /proc/sys/kernel/random/uuid ]]; then
+      echo "CHYBA: nelze vytvořit bezpečný identifikátor Shell Preview." >&2
+      exit 1
+    fi
+    preview_uuid="$(</proc/sys/kernel/random/uuid)"
+    export NOVA_PREVIEW_TOKEN="${preview_uuid//-/}"
+    export NOVA_PREVIEW_TOKEN_BOOTSTRAPPED=1
+    exec "$SCRIPT_PATH" "${ORIGINAL_ARGS[@]}"
+  fi
+
+  if [[ ! "${NOVA_PREVIEW_TOKEN:-}" =~ ^[0-9a-fA-F]{32}$ ]]; then
+    echo "CHYBA: interní token Shell Preview je neplatný." >&2
     exit 1
   fi
-  preview_uuid="$(</proc/sys/kernel/random/uuid)"
-  export NOVA_PREVIEW_TOKEN="${preview_uuid//-/}"
-  exec "$SCRIPT_PATH" "${ORIGINAL_ARGS[@]}"
 fi
 
 is_pid() {
   [[ "${1:-}" =~ ^[0-9]+$ ]]
+}
+
+pid_alive() {
+  local pid="$1"
+  is_pid "$pid" && kill -0 "$pid" 2>/dev/null
 }
 
 read_pid_file() {
@@ -96,6 +110,18 @@ read_token_file() {
   return 0
 }
 
+read_session_format() {
+  local line value=""
+  [[ -r "$SESSION_META_FILE" ]] || return 0
+  while IFS= read -r line; do
+    case "$line" in
+      format_version=*) value="${line#format_version=}"; break ;;
+    esac
+  done < "$SESSION_META_FILE"
+  [[ "$value" =~ ^[0-9]+$ ]] && printf '%s\n' "$value"
+  return 0
+}
+
 process_cmdline() {
   local pid="$1"
   [[ -r "/proc/$pid/cmdline" ]] || return 1
@@ -105,17 +131,15 @@ process_cmdline() {
 process_matches() {
   local pid="$1"
   local pattern="$2"
-  is_pid "$pid" || return 1
-  kill -0 "$pid" 2>/dev/null || return 1
+  pid_alive "$pid" || return 1
   process_cmdline "$pid" 2>/dev/null | grep -Fq -- "$pattern"
 }
 
 process_has_token() {
   local pid="$1"
   local token="$2"
-  is_pid "$pid" || return 1
+  pid_alive "$pid" || return 1
   [[ "$token" =~ ^[0-9a-fA-F]{32}$ ]] || return 1
-  kill -0 "$pid" 2>/dev/null || return 1
   [[ -r "/proc/$pid/environ" ]] || return 1
   tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null |
     grep -Fxq -- "NOVA_PREVIEW_TOKEN=$token"
@@ -139,6 +163,59 @@ legacy_supervisor_matches() {
     process_matches "$pid" "fedora-nova-shell-preview"
 }
 
+pid_pgid() {
+  local pid="$1"
+  is_pid "$pid" || return 1
+  ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' '
+}
+
+group_has_token() {
+  local pgid="$1"
+  local token="$2"
+  local candidate candidate_pgid
+  is_pid "$pgid" || return 1
+  [[ "$token" =~ ^[0-9a-fA-F]{32}$ ]] || return 1
+
+  while read -r candidate candidate_pgid; do
+    [[ "$candidate_pgid" == "$pgid" ]] || continue
+    if process_has_token "$candidate" "$token"; then
+      return 0
+    fi
+  done < <(ps -eo pid=,pgid= 2>/dev/null)
+  return 1
+}
+
+resolve_token_group() {
+  local session_pid="$1"
+  local shell_pid="$2"
+  local stored_pgid="$3"
+  local token="$4"
+  local actual=""
+
+  if session_matches_token "$session_pid" "$token"; then
+    actual="$(pid_pgid "$session_pid")"
+    if is_pid "$actual"; then
+      printf '%s\n' "$actual"
+      return 0
+    fi
+  fi
+
+  if process_has_token "$shell_pid" "$token"; then
+    actual="$(pid_pgid "$shell_pid")"
+    if is_pid "$actual"; then
+      printf '%s\n' "$actual"
+      return 0
+    fi
+  fi
+
+  if is_pid "$stored_pgid" && group_has_token "$stored_pgid" "$token"; then
+    printf '%s\n' "$stored_pgid"
+    return 0
+  fi
+
+  return 1
+}
+
 current_pgid() {
   ps -o pgid= -p "$$" 2>/dev/null | tr -d ' '
 }
@@ -158,81 +235,158 @@ safe_kill_group() {
   kill -s "$signal" -- "-$pgid" 2>/dev/null || true
 }
 
-write_runtime_token() {
-  mkdir -p "$RUNTIME_DIR"
+atomic_write_file() {
+  local path="$1"
+  local mode="${2:-600}"
+  local tmp="${path}.tmp.$$"
+
+  mkdir -p "$(dirname -- "$path")"
+  rm -f "$tmp"
   (
     umask 077
-    printf '%s\n' "$NOVA_PREVIEW_TOKEN" > "$TOKEN_FILE"
+    cat > "$tmp"
+    chmod "$mode" "$tmp"
+    mv -f "$tmp" "$path"
+    chmod "$mode" "$path"
   )
 }
 
-clear_session_metadata() {
-  rm -f "$SESSION_PID_FILE" "$SESSION_PGID_FILE" "$SESSION_META_FILE"
+write_pid_file() {
+  local path="$1"
+  local pid="$2"
+  printf '%s\n' "$pid" | atomic_write_file "$path" 600
 }
 
-stop_recorded_session() {
-  local pid pgid actual_pgid token
-  pid="$(read_pid_file "$SESSION_PID_FILE")"
-  pgid="$(read_pid_file "$SESSION_PGID_FILE")"
-  token="$(read_token_file)"
+write_runtime_token() {
+  mkdir -p "$RUNTIME_DIR"
+  chmod 700 "$RUNTIME_DIR"
+  printf '%s\n' "$NOVA_PREVIEW_TOKEN" | atomic_write_file "$TOKEN_FILE" 600
+}
 
-  if [[ -z "$pid" || -z "$pgid" ]]; then
-    clear_session_metadata
-    return 0
-  fi
+clear_session_metadata() {
+  rm -f "$SESSION_PID_FILE" "$SESSION_PGID_FILE" "$SHELL_CHILD_PID_FILE" "$SESSION_META_FILE"
+}
 
-  # New sessions must carry the exact recorded token. For one upgrade cycle,
-  # keep the old dbus-run-session + PGID check as a compatibility fallback
-  # when metadata predates preview.token.
-  if [[ -n "$token" ]]; then
-    if ! session_matches_token "$pid" "$token"; then
+stop_legacy_session() {
+  local pid="$1"
+  local stored_pgid="$2"
+  local actual_pgid=""
+
+  if ! process_matches "$pid" "dbus-run-session"; then
+    if ! pid_alive "$pid"; then
       clear_session_metadata
       return 0
     fi
-  elif ! process_matches "$pid" "dbus-run-session"; then
-    clear_session_metadata
-    return 0
+    echo "CHYBA: legacy session PID neodpovídá dbus-run-session; metadata ponechávám." >&2
+    return 2
   fi
 
-  actual_pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')"
-  if [[ -z "$actual_pgid" || "$actual_pgid" != "$pgid" ]]; then
-    clear_session_metadata
-    return 0
+  actual_pgid="$(pid_pgid "$pid")"
+  if ! is_pid "$actual_pgid"; then
+    echo "CHYBA: nelze ověřit legacy process group; metadata ponechávám." >&2
+    return 2
   fi
 
-  safe_kill_group "$pgid" TERM
+  if is_pid "$stored_pgid" && [[ "$stored_pgid" != "$actual_pgid" ]]; then
+    echo "VAROVÁNÍ: legacy PGID se změnilo, používám aktuální $actual_pgid." >&2
+  fi
+
+  safe_kill_group "$actual_pgid" TERM
   for _ in {1..40}; do
-    kill -0 "$pid" 2>/dev/null || break
+    pid_alive "$pid" || break
     sleep 0.1
   done
-  if kill -0 "$pid" 2>/dev/null; then
-    safe_kill_group "$pgid" KILL
+  if pid_alive "$pid"; then
+    safe_kill_group "$actual_pgid" KILL
   fi
-
   clear_session_metadata
 }
 
-stop_external_preview() {
-  local supervisor token
-  supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
+stop_recorded_session() {
+  local session_pid stored_pgid shell_pid token format pgid
+  session_pid="$(read_pid_file "$SESSION_PID_FILE")"
+  stored_pgid="$(read_pid_file "$SESSION_PGID_FILE")"
+  shell_pid="$(read_pid_file "$SHELL_CHILD_PID_FILE")"
   token="$(read_token_file)"
+  format="$(read_session_format)"
 
-  if [[ -n "$supervisor" ]]; then
-    if [[ -n "$token" ]] && supervisor_matches_token "$supervisor" "$token"; then
-      kill -TERM "$supervisor" 2>/dev/null || true
-    elif [[ -z "$token" ]] && legacy_supervisor_matches "$supervisor"; then
-      # Compatibility with metadata written before tokenized lifecycle.
-      kill -TERM "$supervisor" 2>/dev/null || true
-    fi
-
-    for _ in {1..40}; do
-      kill -0 "$supervisor" 2>/dev/null || break
-      sleep 0.1
-    done
+  if [[ -z "$session_pid" && -z "$shell_pid" ]]; then
+    clear_session_metadata
+    return 0
   fi
 
-  # If the supervisor was killed abruptly, clean up its nested session too.
-  stop_recorded_session
+  if [[ -z "$token" ]]; then
+    if [[ -n "$format" && "$format" -ge 2 ]]; then
+      if pid_alive "$session_pid" || pid_alive "$shell_pid"; then
+        echo "CHYBA: runtime metadata vyžadují token, ale preview.token chybí nebo je poškozený." >&2
+        return 2
+      fi
+      clear_session_metadata
+      return 0
+    fi
+    stop_legacy_session "$session_pid" "$stored_pgid"
+    return $?
+  fi
+
+  pgid="$(resolve_token_group "$session_pid" "$shell_pid" "$stored_pgid" "$token")" || true
+  if is_pid "$pgid"; then
+    safe_kill_group "$pgid" TERM
+    for _ in {1..40}; do
+      group_has_token "$pgid" "$token" || break
+      sleep 0.1
+    done
+    if group_has_token "$pgid" "$token"; then
+      safe_kill_group "$pgid" KILL
+    fi
+    clear_session_metadata
+    return 0
+  fi
+
+  # A live recorded PID with the wrong token means metadata and process state
+  # disagree. Preserve everything for diagnosis instead of claiming success.
+  if pid_alive "$session_pid" || pid_alive "$shell_pid"; then
+    echo "CHYBA: token Shell Preview neodpovídá běžící session; nic jsem neukončil." >&2
+    return 2
+  fi
+
+  clear_session_metadata
+  return 0
+}
+
+stop_external_preview() {
+  local supervisor token format stop_rc=0
+  supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
+  token="$(read_token_file)"
+  format="$(read_session_format)"
+
+  if pid_alive "$supervisor"; then
+    if [[ -n "$token" ]] && supervisor_matches_token "$supervisor" "$token"; then
+      kill -TERM "$supervisor" 2>/dev/null || true
+      for _ in {1..40}; do
+        pid_alive "$supervisor" || break
+        sleep 0.1
+      done
+      if pid_alive "$supervisor" && supervisor_matches_token "$supervisor" "$token"; then
+        kill -KILL "$supervisor" 2>/dev/null || true
+      fi
+    elif [[ -z "$token" && ( -z "$format" || "$format" -lt 2 ) ]] && legacy_supervisor_matches "$supervisor"; then
+      kill -TERM "$supervisor" 2>/dev/null || true
+      for _ in {1..40}; do
+        pid_alive "$supervisor" || break
+        sleep 0.1
+      done
+    else
+      echo "CHYBA: supervisor běží, ale runtime token/metadata mu neodpovídají; nic nemažu." >&2
+      return 2
+    fi
+  fi
+
+  if ! stop_recorded_session; then
+    stop_rc=$?
+    echo "CHYBA: Shell Preview nebylo možné bezpečně zastavit; runtime metadata zůstávají zachována." >&2
+    return "$stop_rc"
+  fi
+
   rm -rf "$LIVE_LOCK_DIR"
   rm -f "$SUPERVISOR_PID_FILE" "$TOKEN_FILE"
   echo "Shell Preview zastaveno."
@@ -240,7 +394,7 @@ stop_external_preview() {
 
 if [[ $STOP -eq 1 ]]; then
   stop_external_preview
-  exit 0
+  exit $?
 fi
 
 command -v gnome-shell >/dev/null 2>&1 || {
@@ -333,8 +487,6 @@ build_preview_data_dirs() {
     append_preview_data_dir "$candidate"
   done
 
-  # Keep the normal Fedora system lookup path even if the host environment was
-  # customized, and expose system-wide Flatpak exports when installed.
   append_preview_data_dir "/var/lib/flatpak/exports/share"
   append_preview_data_dir "/usr/local/share"
   append_preview_data_dir "/usr/share"
@@ -349,9 +501,6 @@ prepare_export_view() {
   mkdir -p "$target"
   [[ -d "$source" ]] || return 0
 
-  # Explicit allowlist: applications can stay launchable and their icons/mime
-  # data remain visible, but themes and gnome-shell/extensions are never
-  # exposed from the host user data directory.
   for item in applications icons mime metainfo; do
     if [[ -e "$source/$item" ]]; then
       ln -s "$source/$item" "$target/$item"
@@ -368,34 +517,42 @@ prepare_host_exports() {
 
 acquire_live_lock() {
   mkdir -p "$PREVIEW_ROOT" "$RUNTIME_DIR"
+  chmod 700 "$RUNTIME_DIR"
 
   if mkdir "$LIVE_LOCK_DIR" 2>/dev/null; then
-    printf '%s\n' "$$" > "$SUPERVISOR_PID_FILE"
+    chmod 700 "$LIVE_LOCK_DIR"
+    write_pid_file "$SUPERVISOR_PID_FILE" "$$"
     write_runtime_token
     return 0
   fi
 
-  local supervisor recorded_token
+  local supervisor recorded_token format
   supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
   recorded_token="$(read_token_file)"
+  format="$(read_session_format)"
 
-  if [[ -n "$supervisor" ]]; then
+  if pid_alive "$supervisor"; then
     if [[ -n "$recorded_token" ]] && supervisor_matches_token "$supervisor" "$recorded_token"; then
       echo "Shell Preview už běží. Zavři jeho okno nebo spusť ./dev-shell-preview.sh --stop." >&2
       exit 2
     fi
-    if [[ -z "$recorded_token" ]] && legacy_supervisor_matches "$supervisor"; then
+    if [[ -z "$recorded_token" && ( -z "$format" || "$format" -lt 2 ) ]] && legacy_supervisor_matches "$supervisor"; then
       echo "Shell Preview už běží. Zavři jeho okno nebo spusť ./dev-shell-preview.sh --stop." >&2
       exit 2
     fi
+    echo "CHYBA: existuje live lock s běžícím, ale neověřitelným supervisorem; nic nemažu." >&2
+    exit 2
   fi
 
-  # Stale lock after a crash. Clean only a recorded session that still matches
-  # its token (or legacy dbus-run-session metadata during the transition).
-  stop_recorded_session
+  if ! stop_recorded_session; then
+    echo "CHYBA: stale preview nelze bezpečně uklidit; live lock zachovávám." >&2
+    exit 2
+  fi
+
   rm -rf "$LIVE_LOCK_DIR"
   mkdir "$LIVE_LOCK_DIR"
-  printf '%s\n' "$$" > "$SUPERVISOR_PID_FILE"
+  chmod 700 "$LIVE_LOCK_DIR"
+  write_pid_file "$SUPERVISOR_PID_FILE" "$$"
   write_runtime_token
 }
 
@@ -442,8 +599,6 @@ PY
 }
 
 prepare_preview_root() {
-  # Runtime metadata and the isolated HOME live outside these generated/session
-  # directories, so restarts can be cheapened later without weakening isolation.
   rm -rf "$PREVIEW_CONFIG" "$PREVIEW_DATA" "$PREVIEW_CACHE" "$PREVIEW_STATE"
   mkdir -p \
     "$PREVIEW_HOME" \
@@ -457,7 +612,7 @@ prepare_preview_root() {
     "$PREVIEW_CACHE" \
     "$PREVIEW_STATE" \
     "$RUNTIME_DIR"
-  chmod 700 "$PREVIEW_HOME"
+  chmod 700 "$PREVIEW_HOME" "$RUNTIME_DIR"
 
   prepare_host_exports
 
@@ -521,8 +676,6 @@ export_preview_env() {
   export XDG_STATE_HOME="$PREVIEW_STATE"
   export XDG_DATA_DIRS="$PREVIEW_XDG_DATA_DIRS"
 
-  # The nested development session does not need accessibility bridging by
-  # default. Set NOVA_PREVIEW_A11Y=1 to test accessibility explicitly.
   if [[ "${NOVA_PREVIEW_A11Y:-0}" != "1" ]]; then
     export NO_AT_BRIDGE=1
     export GTK_A11Y=none
@@ -538,6 +691,7 @@ export_preview_env() {
   export NOVA_PREVIEW_DOCK_COLOR="$DOCK_COLOR"
   export NOVA_PREVIEW_DOCK_OPACITY="$DOCK_OPACITY"
   export NOVA_PREVIEW_DOCK_SIZE="$DOCK_SIZE"
+  export NOVA_PREVIEW_SHELL_PID_FILE="$SHELL_CHILD_PID_FILE"
 }
 
 print_banner() {
@@ -564,6 +718,13 @@ print_banner() {
 
 SESSION_SCRIPT='
 set -e
+
+rm -f "$NOVA_PREVIEW_SHELL_PID_FILE"
+(
+  umask 077
+  printf "%s\n" "$$" > "$NOVA_PREVIEW_SHELL_PID_FILE"
+  chmod 600 "$NOVA_PREVIEW_SHELL_PID_FILE"
+)
 
 gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" || true
 gsettings set org.gnome.desktop.interface accent-color "$NOVA_PREVIEW_ACCENT" || true
@@ -602,25 +763,25 @@ record_session_metadata() {
   mode="once"
   [[ $WATCH -eq 1 ]] && mode="watch"
 
-  printf '%s\n' "$SHELL_PID" > "$SESSION_PID_FILE"
-  printf '%s\n' "$SHELL_PGID" > "$SESSION_PGID_FILE"
-  (
-    umask 077
-    {
-      printf 'format_version=3\n'
-      printf 'preview_token=%q\n' "$NOVA_PREVIEW_TOKEN"
-      printf 'supervisor_pid=%q\n' "$$"
-      printf 'session_pid=%q\n' "$SHELL_PID"
-      printf 'process_group_id=%q\n' "$SHELL_PGID"
-      printf 'profile=%q\n' "$PROFILE"
-      printf 'mode=%q\n' "$mode"
-      printf 'repo_root=%q\n' "$ROOT"
-      printf 'preview_root=%q\n' "$PREVIEW_ROOT"
-      printf 'preview_home=%q\n' "$PREVIEW_HOME"
-      printf 'xdg_data_dirs=%q\n' "$PREVIEW_XDG_DATA_DIRS"
-      printf 'started_at=%q\n' "$started_at"
-    } > "$SESSION_META_FILE"
-  )
+  write_pid_file "$SESSION_PID_FILE" "$SHELL_PID"
+  write_pid_file "$SESSION_PGID_FILE" "$SHELL_PGID"
+  write_pid_file "$SHELL_CHILD_PID_FILE" "$SHELL_CHILD_PID"
+
+  {
+    printf 'format_version=4\n'
+    printf 'preview_token=%q\n' "$NOVA_PREVIEW_TOKEN"
+    printf 'supervisor_pid=%q\n' "$$"
+    printf 'session_pid=%q\n' "$SHELL_PID"
+    printf 'shell_pid=%q\n' "$SHELL_CHILD_PID"
+    printf 'process_group_id=%q\n' "$SHELL_PGID"
+    printf 'profile=%q\n' "$PROFILE"
+    printf 'mode=%q\n' "$mode"
+    printf 'repo_root=%q\n' "$ROOT"
+    printf 'preview_root=%q\n' "$PREVIEW_ROOT"
+    printf 'preview_home=%q\n' "$PREVIEW_HOME"
+    printf 'xdg_data_dirs=%q\n' "$PREVIEW_XDG_DATA_DIRS"
+    printf 'started_at=%q\n' "$started_at"
+  } | atomic_write_file "$SESSION_META_FILE" 600
 }
 
 start_shell() {
@@ -629,13 +790,14 @@ start_shell() {
   export_preview_env
   print_banner
 
+  rm -f "$SHELL_CHILD_PID_FILE"
   setsid dbus-run-session -- bash -lc "$SESSION_SCRIPT" &
   SHELL_PID=$!
 
   SHELL_PGID=""
   for _ in {1..20}; do
-    SHELL_PGID="$(ps -o pgid= -p "$SHELL_PID" 2>/dev/null | tr -d ' ')"
-    [[ -n "$SHELL_PGID" ]] && break
+    SHELL_PGID="$(pid_pgid "$SHELL_PID")"
+    is_pid "$SHELL_PGID" && break
     sleep 0.05
   done
   if ! is_pid "$SHELL_PGID"; then
@@ -645,39 +807,41 @@ start_shell() {
     return 1
   fi
 
+  SHELL_CHILD_PID=""
+  for _ in {1..40}; do
+    SHELL_CHILD_PID="$(read_pid_file "$SHELL_CHILD_PID_FILE")"
+    if is_pid "$SHELL_CHILD_PID" && process_has_token "$SHELL_CHILD_PID" "$NOVA_PREVIEW_TOKEN"; then
+      break
+    fi
+    SHELL_CHILD_PID=""
+    sleep 0.05
+  done
+  if ! is_pid "$SHELL_CHILD_PID"; then
+    echo "CHYBA: nested Shell nezapsal ověřitelný shell PID." >&2
+    safe_kill_group "$SHELL_PGID" TERM
+    wait "$SHELL_PID" 2>/dev/null || true
+    return 1
+  fi
+
   record_session_metadata
 }
 
 stop_shell() {
-  local pid="${SHELL_PID:-}"
-  local pgid="${SHELL_PGID:-}"
-  local token="${NOVA_PREVIEW_TOKEN:-}"
+  local wait_pid="${SHELL_PID:-}"
+  local rc=0
 
-  if ! is_pid "$pid"; then
-    pid="$(read_pid_file "$SESSION_PID_FILE")"
-  fi
-  if ! is_pid "$pgid"; then
-    pgid="$(read_pid_file "$SESSION_PGID_FILE")"
-  fi
-  if [[ -z "$token" ]]; then
-    token="$(read_token_file)"
-  fi
-
-  if [[ -n "$pid" && -n "$pgid" && -n "$token" ]] && session_matches_token "$pid" "$token"; then
-    safe_kill_group "$pgid" TERM
-    for _ in {1..40}; do
-      kill -0 "$pid" 2>/dev/null || break
-      sleep 0.1
-    done
-    if kill -0 "$pid" 2>/dev/null; then
-      safe_kill_group "$pgid" KILL
+  if stop_recorded_session; then
+    if is_pid "$wait_pid"; then
+      wait "$wait_pid" 2>/dev/null || true
     fi
-    wait "$pid" 2>/dev/null || true
+    SHELL_PID=""
+    SHELL_PGID=""
+    SHELL_CHILD_PID=""
+    return 0
+  else
+    rc=$?
+    return "$rc"
   fi
-
-  SHELL_PID=""
-  SHELL_PGID=""
-  clear_session_metadata
 }
 
 snapshot_state() {
@@ -707,12 +871,18 @@ start_watcher() {
 }
 
 cleanup() {
+  local rc=0
   if [[ -n "${WATCH_PID:-}" ]] && kill -0 "$WATCH_PID" 2>/dev/null; then
     kill "$WATCH_PID" 2>/dev/null || true
     wait "$WATCH_PID" 2>/dev/null || true
   fi
   WATCH_PID=""
-  stop_shell
+
+  if ! stop_shell; then
+    rc=$?
+    echo "VAROVÁNÍ: preview session nebyla bezpečně uklizena; runtime metadata ponechávám." >&2
+    return "$rc"
+  fi
   release_live_lock
 }
 
