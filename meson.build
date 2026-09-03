@@ -25,7 +25,13 @@ subdir('data')
 install_subdir(
   'core',
   install_dir: pkgdatadir,
-  exclude_directories: ['themes-src'],
+  exclude_directories: [
+    'themes-src',
+    '__pycache__',
+  ],
+  exclude_files: [
+    'scripts/build-theme-sass.sh',
+  ],
 )
 
 gnome.post_install(
