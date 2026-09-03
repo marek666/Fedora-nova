@@ -8,6 +8,8 @@ find "$ROOT" \
   -o -name '*.sh' -type f -print0 |
   xargs -0 -r -n1 bash -n
 
+mkdir -p "$ROOT/.dev-build/pycache"
+PYTHONPYCACHEPREFIX="$ROOT/.dev-build/pycache" \
 python3 -m compileall -q \
   "$ROOT/src/fedora_nova" \
   "$ROOT/core/scripts"
