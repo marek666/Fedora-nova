@@ -66,17 +66,17 @@ while (($#)); do
   shift
 done
 
-# Bootstrap a token we generated ourselves. An externally supplied
-# NOVA_PREVIEW_TOKEN must never be enough to skip token creation.
+# Bootstrap a token we generated ourselves. The marker is tied to this PID;
+# exec preserves it, while an ordinary external caller cannot know it in advance.
 if [[ $STOP -ne 1 ]]; then
-  if [[ "${NOVA_PREVIEW_TOKEN_BOOTSTRAPPED:-0}" != "1" ]]; then
+  if [[ "${NOVA_PREVIEW_TOKEN_BOOTSTRAP_PID:-}" != "$$" ]]; then
     if [[ ! -r /proc/sys/kernel/random/uuid ]]; then
       echo "CHYBA: nelze vytvořit bezpečný identifikátor Shell Preview." >&2
       exit 1
     fi
     preview_uuid="$(</proc/sys/kernel/random/uuid)"
     export NOVA_PREVIEW_TOKEN="${preview_uuid//-/}"
-    export NOVA_PREVIEW_TOKEN_BOOTSTRAPPED=1
+    export NOVA_PREVIEW_TOKEN_BOOTSTRAP_PID="$$"
     exec "$SCRIPT_PATH" "${ORIGINAL_ARGS[@]}"
   fi
 
@@ -342,8 +342,6 @@ stop_recorded_session() {
     return 0
   fi
 
-  # A live recorded PID with the wrong token means metadata and process state
-  # disagree. Preserve everything for diagnosis instead of claiming success.
   if pid_alive "$session_pid" || pid_alive "$shell_pid"; then
     echo "CHYBA: token Shell Preview neodpovídá běžící session; nic jsem neukončil." >&2
     return 2
@@ -381,7 +379,9 @@ stop_external_preview() {
     fi
   fi
 
-  if ! stop_recorded_session; then
+  if stop_recorded_session; then
+    :
+  else
     stop_rc=$?
     echo "CHYBA: Shell Preview nebylo možné bezpečně zastavit; runtime metadata zůstávají zachována." >&2
     return "$stop_rc"
@@ -878,12 +878,14 @@ cleanup() {
   fi
   WATCH_PID=""
 
-  if ! stop_shell; then
+  if stop_shell; then
+    release_live_lock
+    return 0
+  else
     rc=$?
     echo "VAROVÁNÍ: preview session nebyla bezpečně uklizena; runtime metadata ponechávám." >&2
     return "$rc"
   fi
-  release_live_lock
 }
 
 acquire_live_lock
