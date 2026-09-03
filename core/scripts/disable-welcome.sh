@@ -50,7 +50,8 @@ case "$ACTION" in
       gnome-initial-setup.desktop \
       gnome-initial-setup-first-login.desktop \
       fedora-welcome.desktop \
-      org.fedoraproject.Welcome.desktop; do
+      org.fedoraproject.Welcome.desktop \
+      liveinst-setup.desktop; do
       disable_autostart "$desktop_id"
     done
 
