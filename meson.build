@@ -27,9 +27,10 @@ install_subdir(
   install_dir: pkgdatadir,
   exclude_directories: [
     'themes-src',
-    '__pycache__',
+    'scripts/__pycache__',
   ],
   exclude_files: [
+    'SHA256SUMS',
     'scripts/build-theme-sass.sh',
   ],
 )
