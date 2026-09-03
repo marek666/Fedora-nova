@@ -29,3 +29,16 @@ jobs:
 
       - name: Install into staging directory
         run: DESTDIR="$PWD/_staging" meson install -C _build
+
+      - name: Validate staging payload
+        run: |
+          if find _staging -type f \( -name '*.pyc' -o -name 'SHA256SUMS' -o -name 'build-theme-sass.sh' \) -print -quit | grep -q .; then
+            echo 'Unexpected development/stale files found in staging payload:' >&2
+            find _staging -type f \( -name '*.pyc' -o -name 'SHA256SUMS' -o -name 'build-theme-sass.sh' \) -print >&2
+            exit 1
+          fi
+          if find _staging -type d -name 'themes-src' -print -quit | grep -q .; then
+            echo 'themes-src must not be shipped in the runtime payload.' >&2
+            find _staging -type d -name 'themes-src' -print >&2
+            exit 1
+          fi
