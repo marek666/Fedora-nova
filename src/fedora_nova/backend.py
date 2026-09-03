@@ -12,6 +12,7 @@ from typing import Any
 from .constants import CORE_ROOT
 
 HEX_RE = re.compile(r"^#?[0-9a-fA-F]{6}$")
+TOKEN_RE = re.compile(r"^[0-9a-fA-F]{32}$")
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -119,13 +120,18 @@ class Backend:
         return helper
 
     @staticmethod
-    def _preview_supervisor_matches(pid: int) -> bool:
+    def _preview_supervisor_matches(pid: int, token: str) -> bool:
+        if not TOKEN_RE.fullmatch(token):
+            return False
         try:
             os.kill(pid, 0)
             cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
+            environ = Path(f"/proc/{pid}/environ").read_bytes()
         except OSError:
             return False
+
         markers = {"dev-shell-preview.sh", "fedora-nova-shell-preview"}
+        marker_found = False
         for raw_arg in cmdline.split(b"\0"):
             if not raw_arg:
                 continue
@@ -134,31 +140,42 @@ class Backend:
             except UnicodeError:
                 continue
             if Path(arg).name in markers:
-                return True
-        return False
+                marker_found = True
+                break
+        if not marker_found:
+            return False
+
+        expected = f"NOVA_PREVIEW_TOKEN={token}".encode()
+        return expected in environ.split(b"\0")
 
     def shell_preview_running(self) -> bool:
         if self.in_flatpak:
             result = self._host_shell(
-                'pidfile="${XDG_CACHE_HOME:-$HOME/.cache}/fedora-nova-shell-preview/runtime/supervisor.pid"; '
-                '[ -s "$pidfile" ] || exit 1; '
-                'pid="$(cat "$pidfile")"; '
+                'runtime="${XDG_CACHE_HOME:-$HOME/.cache}/fedora-nova-shell-preview/runtime"; '
+                'pidfile="$runtime/supervisor.pid"; tokenfile="$runtime/preview.token"; '
+                '[ -s "$pidfile" ] && [ -s "$tokenfile" ] || exit 1; '
+                'pid="$(cat "$pidfile")"; token="$(cat "$tokenfile")"; '
                 'case "$pid" in ""|*[!0-9]*) exit 1;; esac; '
+                'case "$token" in ""|*[!0-9a-fA-F]*) exit 1;; esac; '
+                '[ "${#token}" -eq 32 ] || exit 1; '
                 'kill -0 "$pid" 2>/dev/null || exit 1; '
                 'tr "\\0" "\\n" < "/proc/$pid/cmdline" 2>/dev/null | '
-                'grep -Eq "(^|/)(dev-shell-preview\\.sh|fedora-nova-shell-preview)$"'
+                'grep -Eq "(^|/)(dev-shell-preview\\.sh|fedora-nova-shell-preview)$" || exit 1; '
+                'tr "\\0" "\\n" < "/proc/$pid/environ" 2>/dev/null | '
+                'grep -Fxq "NOVA_PREVIEW_TOKEN=$token"'
             )
             return result.ok
 
-        pidfile = (
+        runtime = (
             Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-            / "fedora-nova-shell-preview/runtime/supervisor.pid"
+            / "fedora-nova-shell-preview/runtime"
         )
         try:
-            pid = int(pidfile.read_text(encoding="utf-8").strip())
+            pid = int((runtime / "supervisor.pid").read_text(encoding="utf-8").strip())
+            token = (runtime / "preview.token").read_text(encoding="utf-8").strip()
         except (OSError, ValueError):
             return False
-        return self._preview_supervisor_matches(pid)
+        return self._preview_supervisor_matches(pid, token)
 
     def launch_shell_preview(self, profile: str, watch: bool = False) -> CommandResult:
         if watch and self.shell_preview_running():
@@ -278,7 +295,6 @@ class Backend:
         return self._host_spawn(["sh", "-lc", script, "fedora-nova-host", *args])
 
     def _host_cli(self, *args: str) -> CommandResult:
-        # Login shell is intentional so ~/.local/bin is available on Fedora.
         script = (
             'command -v fedora-nova >/dev/null 2>&1 || { '
             'echo "Fedora Nova CLI na hostiteli nebylo nalezeno." >&2; '
@@ -322,7 +338,6 @@ class Backend:
         return self.nova_config / "profiles.json"
 
     def profiles(self) -> list[tuple[str, str]]:
-        # `system` is a pseudo-profile used to compare against stock GNOME.
         rows: list[tuple[str, str]] = [
             ("system", "Systémový GNOME — bez Fedora Nova Shell theme a docku")
         ]
@@ -416,7 +431,6 @@ class Backend:
         if self.preview:
             return self._run_preview(*args)
 
-        # Pseudo-profile: use Fedora Nova safe mode and remember the comparison state.
         if len(args) >= 2 and args[0] == "profile" and args[1] == "system":
             result = self._host_cli("safe-mode") if self.in_flatpak else self._run_native("safe-mode")
             if result.ok:
