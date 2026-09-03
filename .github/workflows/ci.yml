@@ -16,7 +16,7 @@ jobs:
           dnf install -y \
             meson ninja-build python3 python3-gobject \
             gtk4-devel libadwaita-devel glib2-devel \
-            desktop-file-utils appstream
+            desktop-file-utils appstream sassc
 
       - name: Static checks
         run: ./check.sh
