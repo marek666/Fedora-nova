@@ -45,8 +45,13 @@ for theme in Tela-circle Tela-circle-dark Tela-circle-light; do
   [[ -d "$TMP/$theme" ]] || die "V archivu chybí $theme."
   rm -rf "$ICONS_ROOT/$theme"
   cp -a "$TMP/$theme" "$ICONS_ROOT/"
+done
+
+"$SCRIPT_DIR/install-trash-icons.sh" "$ICONS_ROOT"
+
+for theme in Tela-circle Tela-circle-dark Tela-circle-light; do
   if command_exists gtk-update-icon-cache; then
     gtk-update-icon-cache -f -t "$ICONS_ROOT/$theme" >/dev/null 2>&1 || true
   fi
 done
-log "Tela Circle: nainstalovány varianty standard, dark a light."
+log "Tela Circle: nainstalovány varianty standard, dark a light včetně Nova koše."

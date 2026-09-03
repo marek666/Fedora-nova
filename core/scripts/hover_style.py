@@ -173,91 +173,80 @@ def dock_reset(dock: str, border: str) -> str:
 def common_reset(dock: str, border: str) -> str:
     grid_icon_reset = grid_overview_icon_selector()
     return f'''
-.app-well-app .overview-icon,
-.show-apps .overview-icon,
-.grid-search-result .overview-icon,
-.dash-item-container .overview-icon {{
-  background-color: transparent !important;
-  box-shadow: none !important;
-  border-radius: 999px !important;
-}}
-
-.app-folder .overview-icon {{
-  background-color: transparent !important;
-  background-image: none !important;
-}}
-
-.app-well-app:hover .overview-icon,
-.app-well-app:focus .overview-icon,
-.show-apps:hover .overview-icon,
-.grid-search-result:hover .overview-icon,
-.dash-item-container:hover .overview-icon {{
-  background-color: rgba(46, 216, 232, 0.20) !important;
-  background-image: none !important;
-  border: 0 !important;
-  border-radius: 999px !important;
-  box-shadow: 0 0 0 55px rgba(46, 216, 232, 0.68), inset 0 0 0 50px rgba(96, 64, 110, 0.78) !important;
-}}
-
-.app-folder:hover .overview-icon {{
-  background-color: transparent !important;
-  background-image: url("assets/app-folder-squircle.svg") !important;
-  box-shadow: none !important;
-}}
-
 .overview-tile,
 .overview-tile:hover,
 .overview-tile:focus,
 .overview-tile:selected,
 .overview-tile:active,
 .overview-tile:checked,
-.overview-tile:outlined,
-.overview-tile.app-folder,
+.overview-tile:outlined {{
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}}
+
 .overview-tile.app-folder:hover,
 .overview-tile.app-folder:focus,
 .overview-tile.app-folder:selected,
 .overview-tile.app-folder:active,
 .overview-tile.app-folder:checked,
 .overview-tile.app-folder:outlined {{
+    background-color: transparent !important;
+      background-image: none !important;
+      border-color: transparent !important;
+      box-sizing: border-box !important;
+      box-shadow: none !important;
+}}
+
+.app-well-app .overview-icon,
+.dash-item-container .overview-icon,
+.grid-search-result .overview-icon {{
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border-radius: 999px !important;
+}}
+
+.show-apps .overview-icon,
+.app-folder .overview-icon {{
   background-color: transparent !important;
   background-image: none !important;
-  border-color: transparent !important;
-  box-sizing: border-box !important;
   box-shadow: none !important;
 }}
 
-#dashtodockContainer #dash .overview-tile:hover,
-#dashtodockContainer #dash .overview-tile:focus,
-#dashtodockContainer #dash .overview-tile:selected,
-#dashtodockContainer #dash .overview-tile:active,
-#dashtodockContainer #dash .overview-tile:checked,
-#dashtodockContainer #dash .overview-tile:outlined,
-#dashtodockContainer #dash .overview-tile.app-folder,
-#dashtodockContainer #dash .overview-tile.app-folder:hover,
-#dashtodockContainer #dash .overview-tile.app-folder:focus,
-#dashtodockContainer #dash .overview-tile.app-folder:selected,
-#dashtodockContainer #dash .overview-tile.app-folder:active,
-#dashtodockContainer #dash .overview-tile.app-folder:checked,
-#dashtodockContainer #dash .overview-tile.app-folder:outlined {{
-  background-color: transparent !important;
+.dash-item-container:hover .overview-icon,
+.app-well-app:hover .overview-icon,
+.app-well-app:focus .overview-icon,
+.grid-search-result:hover .overview-icon {{
+  background-color: rgba(46, 216, 232, 0.20) !important;
   background-image: none !important;
-  border-color: transparent !important;
   border: 0 !important;
-  box-shadow: none !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 0 999px rgba(46, 216, 232, 0.68), inset 0 0 0 994px rgba(96, 64, 110, 0.78) !important;
+}}
+
+.show-apps:hover .overview-icon,
+.app-folder:hover .overview-icon {{
+  background-color: rgba(46, 216, 232, 0.20) !important;
+    background-image: none !important;
+    border: 0 !important;
+    border-radius: 25px !important;
+    box-shadow: 0 0 0 999px rgba(46, 216, 232, 0.68), inset 0 0 0 994px rgba(96, 64, 110, 0.78) !important;
 }}
 
 {dock_reset(dock, border)}
 '''.strip()
 
 
-def icon_bin_selector(states: bool = False, dock_only: bool = False) -> str:
+def icon_bin_selector(states: bool = False, dock_only: bool = False, base_only: bool = False) -> str:
     grid_bases = ['.overview-tile']
     bases = dock_roots() if dock_only else grid_bases
+    base_only = grid_bases
 
     if not states:
         selectors: list[str] = []
         for base in bases:
-            selectors.append(f'{base} {ICON_BIN}')
+            if base_only:
+                selectors.append(f'{base} {ICON_BIN}')
             if dock_only:
                 selectors.extend(
                     f'{base} {child} {ICON_BIN}'
@@ -267,10 +256,11 @@ def icon_bin_selector(states: bool = False, dock_only: bool = False) -> str:
 
     selectors: list[str] = []
     for base in bases:
-        selectors.extend(
-            f'{base_state} {ICON_BIN}'
-            for base_state in stateful(base, include_base=False)
-        )
+        if base_only:
+            selectors.extend(
+                f'{base_state} {ICON_BIN}'
+                for base_state in stateful(base, include_base=False)
+            )
         selectors.extend(overview_icon_bin_states(base))
         if dock_only:
             for child in dock_children(include_show_apps=False):
@@ -297,8 +287,8 @@ def circle_body(
     sr, sg, sb = rgb(secondary)
     reset = common_reset(dock, border)
 
-    grid_normal = icon_bin_selector(False)
-    grid_active = icon_bin_selector(True)
+    grid_normal = icon_bin_selector(False, base_only=True)
+    grid_active = icon_bin_selector(True, base_only=True)
     dock_normal = icon_bin_selector(False, dock_only=True)
     dock_active = icon_bin_selector(True, dock_only=True)
 
@@ -313,30 +303,26 @@ def circle_body(
   box-shadow: none !important;
   transition-duration: 100ms;
 }}
-    
+
 /* App grid: large external halo, especially visible around visually small
  * icons such as Files. No padding or margin changes. */
 {grid_active} {{
   background-color: rgba({ar}, {ag}, {ab}, 0.18) !important;
   background-image: none !important;
   border: 0 !important;
-  border-radius: 999px !important;
   box-shadow:
-    0 0 0 {grid_halo}px rgba({ar}, {ag}, {ab}, 0.15),
-    inset 0 0 0 2px rgba({ar}, {ag}, {ab}, 0.62),
-    inset 0 0 0 3px rgba({sr}, {sg}, {sb}, 0.12) !important;
+    0 0 0 999px rgba(46, 216, 232, 0.68),
+    inset 0 0 0 994px rgba(96, 64, 110, 0.78) !important;
 }}
 
-/* Dock has less free space, so use a smaller but still colored halo. */
-{dock_active} {{
-  background-color: rgba({ar}, {ag}, {ab}, 0.20) !important;
-  background-image: none !important;
-  border: 0 !important;
-  border-radius: 999px !important;
-  box-shadow:
-    0 0 0 {dock_halo}px rgba({ar}, {ag}, {ab}, 0.17),
-    inset 0 0 0 2px rgba({ar}, {ag}, {ab}, 0.68),
-    inset 0 0 0 3px rgba({sr}, {sg}, {sb}, 0.14) !important;
+.app-well-app .overview-icon,
+.app-folder .overview-icon {{
+    min-width: 55px !important;
+}}
+
+.app-well-app .overview-icon > StBoxLayout > StBin,
+.app-folder .overview-icon > StBoxLayout > StBin {{
+    padding: 5px !important;
 }}
 
 /* Never paint the icon texture or folder miniature itself. */
@@ -344,7 +330,6 @@ def circle_body(
 .overview-tile .overview-icon > StBoxLayout > StBin > StWidget {{
   background-color: transparent !important;
   background-image: none !important;
-  border: 0 !important;
   box-shadow: none !important;
 }}
 

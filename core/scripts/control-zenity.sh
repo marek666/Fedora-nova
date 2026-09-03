@@ -22,6 +22,7 @@ while true; do
 	  action="$(zenity --list --title='Fedora Nova Control 0.6.4 — Dock Hover Fix' \
 	    --width=780 --height=650 --column='Akce' --column='Popis' \
 	    'Kompletní setup' 'Persistentní Nova desktop po přihlášení' \
+	    'Vypnout uvítání' 'Ztišit GNOME/Fedora welcome dialog' \
 	    'Profil' 'Vestavěné i vlastní Forge profily' \
     'Nova Forge' 'Vytvořit profil z libovolné HEX barvy' \
     'Smazat Forge profil' 'Odstranit neaktivní vlastní profil' \
@@ -48,6 +49,10 @@ while true; do
 	    'Kompletní setup')
 	      "$SCRIPT_DIR/apply-preset.sh" full --reload &&
 	        zenity --info --text='Kompletní Nova setup byl použit a zapamatován.'
+	      ;;
+	    'Vypnout uvítání')
+	      "$SCRIPT_DIR/disable-welcome.sh" off &&
+	        zenity --info --text='Uvítací okna GNOME/Fedora jsou vypnutá.'
 	      ;;
 	    Profil)
       profile="$(profile_picker)"

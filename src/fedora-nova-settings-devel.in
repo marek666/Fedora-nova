@@ -7,6 +7,7 @@ import sys
 PKGDATADIR = "@PKGDATADIR@"
 sys.path.insert(0, PKGDATADIR)
 os.environ.setdefault("FEDORA_NOVA_CORE", os.path.join(PKGDATADIR, "core"))
+os.environ.setdefault("FEDORA_NOVA_PREVIEW", "1")
 
 from fedora_nova.application import main
 

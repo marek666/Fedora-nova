@@ -333,15 +333,15 @@ class Pages:
         backend_group = Adw.PreferencesGroup(
             title="Vývojový backend",
             description=(
-                "Preview je bezpečný sandbox. System Host spouští skutečné "
-                "Fedora Nova CLI na hostitelské Fedoře."
+                "Preview je bezpečný sandbox. System Host je ve vývojové "
+                "verzi dostupný jen při explicitním povolení."
             ),
         )
         host_switch = Adw.SwitchRow(
             title="System Host",
             subtitle=(
                 "Zapnuté = tlačítka mění skutečný GNOME systém. "
-                "Ve Flatpaku se používá flatpak-spawn --host."
+                "Spouštěj jen s FEDORA_NOVA_HOST_ALLOWED=1."
             ),
         )
         host_switch.set_active(self.backend.runtime_mode == "host")
@@ -371,7 +371,7 @@ class Pages:
             title="Kompletní Nova setup",
             description=(
                 "Aktivní profil, rozšíření, křivky, hover, ikony, Steam a "
-                "GTK barvy jedním krokem."
+                "GTK barvy jedním krokem včetně vypnutí uvítání."
             ),
         )
         full_button = Gtk.Button(label="Použít a zapamatovat")
@@ -395,6 +395,16 @@ class Pages:
             ),
         )
         preset_group.add(button_row("Aktuální session", restore_button))
+        welcome_button = Gtk.Button(label="Vypnout uvítání")
+        welcome_button.connect(
+            "clicked",
+            lambda _button: self.window.run_async(
+                ["welcome", "off"],
+                "Uvítací okna GNOME/Fedora jsou vypnutá",
+                self.window.profile_changed,
+            ),
+        )
+        preset_group.add(button_row("Welcome dialog", welcome_button))
         page.add(preset_group)
 
         shell_group = Adw.PreferencesGroup(

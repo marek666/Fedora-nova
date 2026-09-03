@@ -47,7 +47,7 @@ fedora-nova preset full --reload
 
 Ten zapne User Themes, Dash to Dock, Top Bar All Monitors, Continuous
 Squircle, Circle Large hover, Tela Circle + kruhové Steam ikony a Nova barvy
-v GTK/libadwaita aplikacích.
+v GTK/libadwaita aplikacích. Zároveň vypne GNOME/Fedora welcome dialog.
 
 Potom aplikuj nový hover explicitně:
 

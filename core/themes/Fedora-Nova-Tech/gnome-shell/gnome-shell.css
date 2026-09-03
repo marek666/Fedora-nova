@@ -243,8 +243,6 @@ stage {
 .app-folder-dialog .overview-icon {
   border-radius: 14px;
   transition-duration: 80ms;
-  min-width: 100% !important;
-  min-height: 100% !important;
 }
 .overview-icon:hover,
 .overview-icon:focus,
@@ -506,12 +504,12 @@ stage {
 
 /* ── Tela Circle integration ─────────────────────────────────────────── */
 .app-well-app .overview-icon,
-.show-apps .overview-icon,
 .grid-search-result .overview-icon,
 .dash-item-container .overview-icon { 
   background-color: transparent !important;
   box-shadow: none !important;
   border-radius: 999px !important;
+  /* padding: 5px !important; */
   /* background-color: rgba(46, 216, 232, 0.20) !important;
   background-image: none !important;
   border: 0 !important;
@@ -522,16 +520,15 @@ stage {
     inset 0 0 0 155px rgba(140, 92, 255, 0.14) !important; */
 }
 
+/*.show-apps .overview-icon, 
 .app-folder .overview-icon {
   background-color: transparent;
   background-image: none !important;
-}
+} */
 
 .app-well-app:hover .overview-icon,
 .app-well-app:focus .overview-icon, 
-.show-apps:hover .overview-icon, 
-.grid-search-result:hover .overview-icon,
-.dash-item-container:hover .overview-icon {
+.grid-search-result:hover .overview-icon {
   /* background-color: rgba(46, 216, 232, 0.11) !important; */
   /* box-shadow: inset 0 0 0 50px rgba(46, 216, 232, 0.24), inset 0 0 0 55px rgba(96, 64, 110, 0.78) !important; */
   /* border-radius: 999px !important; */ 
@@ -548,10 +545,11 @@ stage {
   box-shadow: 0 0 0 55px rgba(46, 216, 232, 0.68), inset 0 0 0 50px rgba(96, 64, 110, 0.78) !important;
 } 
 
-.app-folder:hover .overview-icon {
+/*.show-apps:hover .overview-icon,
+  .app-folder:hover .overview-icon {
   background-color: transparent;
   background-image: url("assets/app-folder-squircle.svg") !important;
-}
+} */
 
 /* NOVA_TRUE_SQUIRCLE_START */
 /* SVG superellipse: visually closer to Apple's continuous corner than a circular CSS radius. */

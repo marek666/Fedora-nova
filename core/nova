@@ -28,6 +28,7 @@ Usage: fedora-nova COMMAND [ARGS]
   monitors {on|off|status|refresh}      horní panel na sekundárních monitorech
   session-restore {apply|enable|disable|status}
                                        znovu aplikuje Nova setup po přihlášení
+  welcome {off|status}                 vypne uvítací GNOME/Fedora dialogy
   snapshot create [NAME]               pojmenovaný bod obnovy
   snapshot list|restore|delete ...     správa snapshotů
   export [FILE.tar.gz]                 přenosná záloha včetně Forge profilů
@@ -75,6 +76,7 @@ case "$cmd" in
   session-restore)
     if [[ $# -eq 0 ]]; then "$ROOT/scripts/session-restore.sh" status
     else "$ROOT/scripts/session-restore.sh" "$@"; fi ;;
+  welcome) "$ROOT/scripts/disable-welcome.sh" "${1:-status}" ;;
   snapshot) "$ROOT/scripts/snapshot.sh" "$@" ;;
   export) "$ROOT/scripts/export-config.sh" "${1:-}" ;;
   import) "$ROOT/scripts/import-config.sh" "${1:-}" ;;

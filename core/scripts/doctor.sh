@@ -45,6 +45,13 @@ else
   printf '  WARN Fedora Nova session restore není zapnutý.\n'
   issues=$((issues+1))
 fi
+if [[ -f "$NOVA_CONFIG_HOME/gnome-initial-setup-done" &&
+      -f "$NOVA_AUTOSTART_DIR/org.gnome.Tour.desktop" ]]; then
+  printf '  OK   GNOME/Fedora welcome dialog je vypnutý.\n'
+else
+  printf '  WARN GNOME/Fedora welcome dialog nemusí být vypnutý.\n'
+  issues=$((issues+1))
+fi
 
 if gnome-extensions list --enabled 2>/dev/null |
     grep -Fxq blur-my-shell@aunetx; then

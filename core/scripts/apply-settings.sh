@@ -62,6 +62,7 @@ if [[ "$DOCK_PRESET" != profile-default ]]; then
 fi
 "$SCRIPT_DIR/gtk-theme.sh" "$(current_gtk)"
 "$SCRIPT_DIR/monitor-panel.sh" on
+"$SCRIPT_DIR/disable-welcome.sh" off
 if [[ $SESSION_RESTORE -eq 1 ]]; then
   log "Session restore dokončen."
 else

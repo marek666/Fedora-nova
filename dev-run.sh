@@ -2,16 +2,18 @@
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
-MODE="${1:-host}"
+MODE="${1:-preview}"
 case "$MODE" in
   host)
     export FEDORA_NOVA_PREVIEW=0
+    export FEDORA_NOVA_HOST_ALLOWED=1
     ;;
   preview)
     export FEDORA_NOVA_PREVIEW=1
     ;;
   *)
-    echo "Použij: ./dev-run.sh [host|preview]" >&2
+    echo "Použij: ./dev-run.sh [preview|host]" >&2
+    echo "Výchozí je preview bez zásahu do host GNOME." >&2
     exit 2
     ;;
 esac

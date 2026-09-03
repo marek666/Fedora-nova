@@ -53,9 +53,16 @@ class Backend:
         self.nova_config.mkdir(parents=True, exist_ok=True)
 
         self.in_flatpak = Path("/.flatpak-info").exists()
-        forced_preview = os.environ.get("FEDORA_NOVA_PREVIEW") == "1"
+        preview_setting = os.environ.get("FEDORA_NOVA_PREVIEW")
+        forced_preview = preview_setting == "1"
+        forced_host = preview_setting == "0"
+        self.host_allowed = (
+            forced_host or os.environ.get("FEDORA_NOVA_HOST_ALLOWED") == "1"
+        )
         self.runtime_mode = (
-            "preview" if (self.in_flatpak or forced_preview) else "host"
+            "preview"
+            if (forced_preview or not self.host_allowed or self.in_flatpak)
+            else "host"
         )
         self.core_root = CORE_ROOT
         self.cli = self._resolve_cli()
@@ -85,6 +92,8 @@ class Backend:
 
     @property
     def can_host(self) -> bool:
+        if not self.host_allowed:
+            return False
         if not self.in_flatpak:
             return self.cli is not None
         return shutil.which("flatpak-spawn") is not None
@@ -459,6 +468,7 @@ class Backend:
             self.write_state("current-gtk", "on")
             self.write_state("preview-monitors", "on")
             self.write_state("preview-session-restore", "on")
+            self.write_state("preview-welcome", "off")
             return CommandResult(
                 0,
                 stdout=(
@@ -472,6 +482,12 @@ class Backend:
         if command == "session-restore" and value in {"disable", "off"}:
             self.write_state("preview-session-restore", "off")
             return CommandResult(0, stdout="Preview: session restore vypnutý.")
+        if command == "welcome" and value in {"off", "disable"}:
+            self.write_state("preview-welcome", "off")
+            return CommandResult(0, stdout="Preview: welcome dialog vypnutý.")
+        if command == "welcome" and value == "status":
+            state = self.read_state("preview-welcome", "unknown")
+            return CommandResult(0, stdout=f"Preview: welcome dialog {state}.")
         if command in state_map and value:
             self.write_state(state_map[command], value)
         elif command == "monitors" and value in {"on", "off"}:

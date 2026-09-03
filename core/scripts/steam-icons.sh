@@ -36,6 +36,7 @@ case "$ACTION" in
       log "Steam herní ikony byly zabaleny do kruhové Fedora Nova vrstvy."
     elif [[ $CODE -eq 4 ]]; then
       [[ $QUIET -eq 1 ]] || printf '%s\n' "$OUTPUT"
+      printf 'tela-steam\n' > "$NOVA_CONFIG_DIR/current-icons"
       log "Nebyla nalezena žádná použitelná Steam herní zkratka; icon theme se nemění."
     else
       printf '%s\n' "$OUTPUT" >&2

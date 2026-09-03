@@ -21,8 +21,8 @@ Examples:
   ./dev-shell-preview.sh --watch tech
   ./dev-shell-preview.sh --stop
 
-In --watch mode the nested GNOME Shell is restarted when bundled themes,
-wallpapers or profile config changes. The host GNOME session is untouched.
+In --watch mode the nested GNOME Shell is restarted when anything under
+core/ changes. The host GNOME session is untouched.
 USAGE
 }
 
@@ -220,6 +220,7 @@ prepare_preview_root() {
   rm -rf "$PREVIEW_CONFIG" "$PREVIEW_DATA" "$PREVIEW_CACHE" "$PREVIEW_STATE"
   mkdir -p \
     "$PREVIEW_CONFIG" \
+    "$PREVIEW_CONFIG/autostart" \
     "$PREVIEW_CONFIG/fedora-nova" \
     "$PREVIEW_DATA/themes" \
     "$PREVIEW_DATA/icons" \
@@ -233,6 +234,24 @@ prepare_preview_root() {
   if [[ -d "$TOPBAR_SOURCE" ]]; then
     cp -a "$TOPBAR_SOURCE" "$PREVIEW_DATA/gnome-shell/extensions/"
   fi
+
+  for desktop_id in \
+    org.gnome.Tour.desktop \
+    gnome-tour.desktop \
+    gnome-initial-setup.desktop \
+    gnome-initial-setup-first-login.desktop \
+    fedora-welcome.desktop \
+    org.fedoraproject.Welcome.desktop; do
+    cat > "$PREVIEW_CONFIG/autostart/$desktop_id" <<EOF
+[Desktop Entry]
+Type=Application
+Name=${desktop_id%.desktop}
+Hidden=true
+X-GNOME-Autostart-enabled=false
+NoDisplay=true
+EOF
+  done
+  : > "$PREVIEW_CONFIG/gnome-initial-setup-done"
 
   printf '%s\n' "$PROFILE" > "$PREVIEW_CONFIG/fedora-nova/current-profile"
   printf 'squircle\n' > "$PREVIEW_CONFIG/fedora-nova/current-curve"
@@ -306,6 +325,10 @@ gsettings set org.gnome.desktop.interface icon-theme "$NOVA_PREVIEW_ICON_THEME" 
 gsettings set org.gnome.desktop.background picture-uri "file://$NOVA_PREVIEW_WALL" || true
 gsettings set org.gnome.desktop.background picture-uri-dark "file://$NOVA_PREVIEW_WALL" || true
 gsettings set org.gnome.desktop.background picture-options "zoom" || true
+if gsettings writable org.gnome.shell welcome-dialog-last-shown-version >/dev/null 2>&1; then
+  shell_version="$(gnome-shell --version 2>/dev/null | awk "{print \$NF}")"
+  gsettings set org.gnome.shell welcome-dialog-last-shown-version "${shell_version:-999.0}" || true
+fi
 
 gsettings set org.gnome.shell enabled-extensions "$NOVA_PREVIEW_EXTENSIONS"
 gsettings set org.gnome.shell.extensions.user-theme name "$NOVA_PREVIEW_THEME"
@@ -352,7 +375,7 @@ stop_shell() {
 }
 
 snapshot_state() {
-  find "$CORE/themes" "$CORE/assets/wallpapers" "$PROFILE_JSON" \
+  find "$CORE" \
     -type f -printf '%T@ %p\n' 2>/dev/null |
     sort |
     sha256sum
@@ -362,9 +385,7 @@ start_watcher() {
   if command -v inotifywait >/dev/null 2>&1; then
     inotifywait -q -r \
       -e close_write,create,delete,move \
-      "$CORE/themes" \
-      "$CORE/assets/wallpapers" \
-      "$PROFILE_JSON" >/dev/null &
+      "$CORE" >/dev/null &
     WATCH_PID=$!
     return
   fi

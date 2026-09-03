@@ -39,13 +39,15 @@ Preview používá:
 - Tela Circle ikony,
 - Continuous Squircle curve,
 - Circle Large hover,
-- Nova GTK/libadwaita barvy v izolovaném preview configu.
+- Nova ikony koše z `core/assets/icons` v Tela Circle,
+- Nova GTK/libadwaita barvy v izolovaném preview configu,
+- vypnuté GNOME/Fedora uvítání uvnitř izolovaného Mutter profilu.
 
 Normální přihlášené GNOME se tím nepřepíná.
 
-Live režim `--watch` sleduje bundled themes, wallpapers a profily. Při změně
-zdrojů ukončí nested Shell, znovu vytvoří izolovaný preview root a spustí nové
-okno s aktuálním kódem.
+Live režim `--watch` sleduje celou složku `core/`. Při změně zdrojů ukončí
+nested Shell, znovu vytvoří izolovaný preview root a spustí nové okno s
+aktuálním kódem.
 Současně běží vždy jen jedna live instance.
 
 ## Instalace vývojových závislostí
@@ -111,7 +113,8 @@ fedora-nova preset full --reload
 
 Zapne User Themes, Dash to Dock a Top Bar All Monitors, nastaví Continuous
 Squircle curve, Circle Large hover, Tela Circle + kruhové Steam ikony, Nova
-GTK/libadwaita barvy a session restore po přihlášení.
+GTK/libadwaita barvy, session restore po přihlášení a vypne GNOME/Fedora
+welcome dialog.
 
 ## Kde upravovat theme
 
