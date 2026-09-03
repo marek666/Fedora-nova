@@ -7,6 +7,22 @@ PROFILE="tech"
 WATCH=0
 STOP=0
 
+PREVIEW_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/fedora-nova-shell-preview"
+PREVIEW_CONFIG="$PREVIEW_ROOT/config"
+PREVIEW_DATA="$PREVIEW_ROOT/data"
+PREVIEW_CACHE="$PREVIEW_ROOT/cache"
+PREVIEW_STATE="$PREVIEW_ROOT/state"
+RUNTIME_DIR="$PREVIEW_ROOT/runtime"
+LIVE_LOCK_DIR="$PREVIEW_ROOT/live.lock"
+SUPERVISOR_PID_FILE="$RUNTIME_DIR/supervisor.pid"
+SESSION_PID_FILE="$RUNTIME_DIR/session.pid"
+SESSION_PGID_FILE="$RUNTIME_DIR/session.pgid"
+SESSION_META_FILE="$RUNTIME_DIR/session.env"
+
+SHELL_PID=""
+SHELL_PGID=""
+WATCH_PID=""
+
 usage() {
   cat <<'USAGE'
 Fedora Nova Shell Preview
@@ -21,8 +37,9 @@ Examples:
   ./dev-shell-preview.sh --watch tech
   ./dev-shell-preview.sh --stop
 
-In --watch mode the nested GNOME Shell is restarted when anything under
-core/ changes. The host GNOME session is untouched.
+The preview runs in an isolated XDG + D-Bus session. In --watch mode the
+nested GNOME Shell is restarted when anything under core/ changes.
+The host GNOME session is untouched.
 USAGE
 }
 
@@ -36,23 +53,110 @@ while (($#)); do
   shift
 done
 
-if [[ $STOP -eq 1 ]]; then
-  preview_root="${XDG_CACHE_HOME:-$HOME/.cache}/fedora-nova-shell-preview"
-  live_pid_file="$preview_root/live.pid"
-  live_lock_dir="$preview_root/live.lock"
-  pid=""
-  if [[ -s "$live_pid_file" ]]; then
-    pid="$(<"$live_pid_file")"
+is_pid() {
+  [[ "${1:-}" =~ ^[0-9]+$ ]]
+}
+
+read_pid_file() {
+  local path="$1"
+  local value=""
+  [[ -s "$path" ]] && value="$(<"$path")"
+  is_pid "$value" && printf '%s\n' "$value"
+  return 0
+}
+
+process_cmdline() {
+  local pid="$1"
+  [[ -r "/proc/$pid/cmdline" ]] || return 1
+  tr '\0' ' ' < "/proc/$pid/cmdline"
+}
+
+process_matches() {
+  local pid="$1"
+  local pattern="$2"
+  is_pid "$pid" || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  process_cmdline "$pid" 2>/dev/null | grep -Fq -- "$pattern"
+}
+
+current_pgid() {
+  ps -o pgid= -p "$$" 2>/dev/null | tr -d ' '
+}
+
+safe_kill_group() {
+  local pgid="$1"
+  local signal="${2:-TERM}"
+  local own_pgid=""
+
+  is_pid "$pgid" || return 1
+  own_pgid="$(current_pgid)"
+  if [[ -n "$own_pgid" && "$pgid" == "$own_pgid" ]]; then
+    echo "CHYBA: odmítám ukončit vlastní process group $pgid." >&2
+    return 1
   fi
-  if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
-    kill "$pid" 2>/dev/null || true
-    for _ in {1..30}; do
-      kill -0 "$pid" 2>/dev/null || break
+
+  kill -s "$signal" -- "-$pgid" 2>/dev/null || true
+}
+
+clear_session_metadata() {
+  rm -f "$SESSION_PID_FILE" "$SESSION_PGID_FILE" "$SESSION_META_FILE"
+}
+
+stop_recorded_session() {
+  local pid pgid actual_pgid
+  pid="$(read_pid_file "$SESSION_PID_FILE")"
+  pgid="$(read_pid_file "$SESSION_PGID_FILE")"
+
+  if [[ -z "$pid" || -z "$pgid" ]]; then
+    clear_session_metadata
+    return 0
+  fi
+
+  # Avoid killing an unrelated process if a stale PID has been recycled.
+  if ! process_matches "$pid" "dbus-run-session"; then
+    clear_session_metadata
+    return 0
+  fi
+
+  actual_pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')"
+  if [[ -z "$actual_pgid" || "$actual_pgid" != "$pgid" ]]; then
+    clear_session_metadata
+    return 0
+  fi
+
+  safe_kill_group "$pgid" TERM
+  for _ in {1..40}; do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    safe_kill_group "$pgid" KILL
+  fi
+
+  clear_session_metadata
+}
+
+stop_external_preview() {
+  local supervisor
+  supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
+
+  if [[ -n "$supervisor" ]] && process_matches "$supervisor" "dev-shell-preview.sh"; then
+    kill -TERM "$supervisor" 2>/dev/null || true
+    for _ in {1..40}; do
+      kill -0 "$supervisor" 2>/dev/null || break
       sleep 0.1
     done
   fi
-  rm -rf "$live_lock_dir" "$live_pid_file"
-  echo "Live Shell Preview zastaveno."
+
+  # If the supervisor was killed abruptly, clean up its nested session too.
+  stop_recorded_session
+  rm -rf "$LIVE_LOCK_DIR"
+  rm -f "$SUPERVISOR_PID_FILE"
+  echo "Shell Preview zastaveno."
+}
+
+if [[ $STOP -eq 1 ]]; then
+  stop_external_preview
   exit 0
 fi
 
@@ -62,25 +166,29 @@ command -v gnome-shell >/dev/null 2>&1 || {
 }
 
 if [[ ! -x /usr/libexec/mutter-devkit ]]; then
-  cat >&2 <<'EOF'
+  cat >&2 <<'ERR'
 CHYBA: Mutter Development Kit není nainstalovaný.
 
 Na Fedoře:
   sudo dnf install mutter-devkit
-EOF
+ERR
   exit 1
 fi
 
-command -v dbus-run-session >/dev/null 2>&1 || {
-  echo "CHYBA: chybí dbus-run-session." >&2
-  exit 1
-}
-
-if [[ $WATCH -eq 1 ]]; then
-  command -v setsid >/dev/null 2>&1 || {
-    echo "CHYBA: live preview potřebuje setsid." >&2
+for command_name in dbus-run-session setsid ps grep tr python3; do
+  command -v "$command_name" >/dev/null 2>&1 || {
+    echo "CHYBA: chybí $command_name." >&2
     exit 1
   }
+done
+
+if ! command -v inotifywait >/dev/null 2>&1; then
+  for command_name in find sort sha256sum; do
+    command -v "$command_name" >/dev/null 2>&1 || {
+      echo "CHYBA: bez inotifywait chybí fallback nástroj $command_name." >&2
+      exit 1
+    }
+  done
 fi
 
 PROFILE_JSON="$CORE/config/profiles.json"
@@ -116,71 +224,35 @@ ENABLED+="]"
 ORIGINAL_XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 ORIGINAL_XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
-PREVIEW_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/fedora-nova-shell-preview"
-PREVIEW_CONFIG="$PREVIEW_ROOT/config"
-PREVIEW_DATA="$PREVIEW_ROOT/data"
-PREVIEW_CACHE="$PREVIEW_ROOT/cache"
-PREVIEW_STATE="$PREVIEW_ROOT/state"
-LIVE_LOCK_DIR="$PREVIEW_ROOT/live.lock"
-LIVE_PID_FILE="$PREVIEW_ROOT/live.pid"
-
-SHELL_PID=""
-WATCH_PID=""
-
-is_pid() {
-  [[ "${1:-}" =~ ^[0-9]+$ ]]
-}
-
-live_pid() {
-  local pid=""
-  if [[ -s "$LIVE_PID_FILE" ]]; then
-    pid="$(<"$LIVE_PID_FILE")"
-  fi
-  if is_pid "$pid"; then
-    printf '%s\n' "$pid"
-  fi
-  return 0
-}
-
-live_running() {
-  local pid
-  pid="$(live_pid)"
-  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
-}
-
-stop_live_preview() {
-  local pid
-  pid="$(live_pid)"
-  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-    kill "$pid" 2>/dev/null || true
-    for _ in {1..30}; do
-      kill -0 "$pid" 2>/dev/null || break
-      sleep 0.1
-    done
-  fi
-  rm -rf "$LIVE_LOCK_DIR" "$LIVE_PID_FILE"
-}
-
 acquire_live_lock() {
-  mkdir -p "$PREVIEW_ROOT"
+  mkdir -p "$PREVIEW_ROOT" "$RUNTIME_DIR"
+
   if mkdir "$LIVE_LOCK_DIR" 2>/dev/null; then
-    printf '%s\n' "$$" > "$LIVE_PID_FILE"
-    return
+    printf '%s\n' "$$" > "$SUPERVISOR_PID_FILE"
+    return 0
   fi
 
-  if live_running; then
-    echo "Live Shell Preview už běží. Zavři jeho okno nebo spusť ./dev-shell-preview.sh --stop." >&2
+  local supervisor
+  supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
+  if [[ -n "$supervisor" ]] && process_matches "$supervisor" "dev-shell-preview.sh"; then
+    echo "Shell Preview už běží. Zavři jeho okno nebo spusť ./dev-shell-preview.sh --stop." >&2
     exit 2
   fi
 
-  rm -rf "$LIVE_LOCK_DIR" "$LIVE_PID_FILE"
+  # Stale lock after a crash. Clean only a session that still matches our
+  # recorded dbus-run-session PID/PGID pair.
+  stop_recorded_session
+  rm -rf "$LIVE_LOCK_DIR"
   mkdir "$LIVE_LOCK_DIR"
-  printf '%s\n' "$$" > "$LIVE_PID_FILE"
+  printf '%s\n' "$$" > "$SUPERVISOR_PID_FILE"
 }
 
 release_live_lock() {
-  if [[ -s "$LIVE_PID_FILE" ]] && [[ "$(<"$LIVE_PID_FILE")" == "$$" ]]; then
-    rm -rf "$LIVE_LOCK_DIR" "$LIVE_PID_FILE"
+  local supervisor
+  supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
+  if [[ "$supervisor" == "$$" ]]; then
+    rm -rf "$LIVE_LOCK_DIR"
+    rm -f "$SUPERVISOR_PID_FILE"
   fi
 }
 
@@ -217,6 +289,8 @@ PY
 }
 
 prepare_preview_root() {
+  # Runtime metadata lives outside these generated/session directories so a
+  # restart cannot erase the information needed to stop a stale session.
   rm -rf "$PREVIEW_CONFIG" "$PREVIEW_DATA" "$PREVIEW_CACHE" "$PREVIEW_STATE"
   mkdir -p \
     "$PREVIEW_CONFIG" \
@@ -227,7 +301,8 @@ prepare_preview_root() {
     "$PREVIEW_DATA/gnome-shell/extensions" \
     "$PREVIEW_DATA/backgrounds/fedora-nova" \
     "$PREVIEW_CACHE" \
-    "$PREVIEW_STATE"
+    "$PREVIEW_STATE" \
+    "$RUNTIME_DIR"
 
   cp -a "$CORE/themes/." "$PREVIEW_DATA/themes/"
   cp -a "$CORE/assets/wallpapers/." "$PREVIEW_DATA/backgrounds/fedora-nova/"
@@ -241,7 +316,8 @@ prepare_preview_root() {
     gnome-initial-setup.desktop \
     gnome-initial-setup-first-login.desktop \
     fedora-welcome.desktop \
-    org.fedoraproject.Welcome.desktop; do
+    org.fedoraproject.Welcome.desktop \
+    liveinst-setup.desktop; do
     cat > "$PREVIEW_CONFIG/autostart/$desktop_id" <<EOF
 [Desktop Entry]
 Type=Application
@@ -286,9 +362,18 @@ export_preview_env() {
   export XDG_CACHE_HOME="$PREVIEW_CACHE"
   export XDG_STATE_HOME="$PREVIEW_STATE"
 
-  # Keep host user applications, icons and system data discoverable while
-  # retaining a completely separate user theme + dconf database.
+  # Host applications remain discoverable for now. Extension isolation will
+  # be tightened separately so that this lifecycle change stays low-risk.
   export XDG_DATA_DIRS="$ORIGINAL_XDG_DATA_HOME:$ORIGINAL_XDG_DATA_DIRS"
+
+  # The nested development session does not need accessibility bridging by
+  # default. Set NOVA_PREVIEW_A11Y=1 to test accessibility explicitly.
+  if [[ "${NOVA_PREVIEW_A11Y:-0}" != "1" ]]; then
+    export NO_AT_BRIDGE=1
+    export GTK_A11Y=none
+  else
+    unset NO_AT_BRIDGE GTK_A11Y || true
+  fi
 
   export NOVA_PREVIEW_THEME="$THEME"
   export NOVA_PREVIEW_WALL="$WALL_PATH"
@@ -310,6 +395,11 @@ print_banner() {
   echo "Izolace:     $PREVIEW_ROOT"
   if [[ $WATCH -eq 1 ]]; then
     echo "Live:        zapnuto"
+  fi
+  if [[ "${NOVA_PREVIEW_A11Y:-0}" == "1" ]]; then
+    echo "A11y bridge: zapnutý"
+  else
+    echo "A11y bridge: vypnutý (dev preview)"
   fi
   echo
   echo "Zavřením okna Mutter Development Kit ukončíš preview."
@@ -350,28 +440,71 @@ fi
 exec gnome-shell --devkit --wayland
 '
 
+record_session_metadata() {
+  local started_at
+  started_at="$(date --iso-8601=seconds 2>/dev/null || date)"
+  printf '%s\n' "$SHELL_PID" > "$SESSION_PID_FILE"
+  printf '%s\n' "$SHELL_PGID" > "$SESSION_PGID_FILE"
+  cat > "$SESSION_META_FILE" <<EOF
+supervisor_pid=$$
+session_pid=$SHELL_PID
+process_group_id=$SHELL_PGID
+profile=$PROFILE
+started_at=$started_at
+EOF
+}
+
 start_shell() {
   load_profile
   prepare_preview_root
   export_preview_env
   print_banner
+
   setsid dbus-run-session -- bash -lc "$SESSION_SCRIPT" &
   SHELL_PID=$!
+
+  SHELL_PGID=""
+  for _ in {1..20}; do
+    SHELL_PGID="$(ps -o pgid= -p "$SHELL_PID" 2>/dev/null | tr -d ' ')"
+    [[ -n "$SHELL_PGID" ]] && break
+    sleep 0.05
+  done
+  if ! is_pid "$SHELL_PGID"; then
+    echo "CHYBA: nepodařilo se zjistit process group Shell Preview." >&2
+    kill "$SHELL_PID" 2>/dev/null || true
+    wait "$SHELL_PID" 2>/dev/null || true
+    return 1
+  fi
+
+  record_session_metadata
 }
 
 stop_shell() {
-  if [[ -n "${SHELL_PID:-}" ]] && kill -0 "-$SHELL_PID" 2>/dev/null; then
-    kill -TERM -- "-$SHELL_PID" 2>/dev/null || true
+  local pid="${SHELL_PID:-}"
+  local pgid="${SHELL_PGID:-}"
+
+  if ! is_pid "$pid"; then
+    pid="$(read_pid_file "$SESSION_PID_FILE")"
+  fi
+  if ! is_pid "$pgid"; then
+    pgid="$(read_pid_file "$SESSION_PGID_FILE")"
+  fi
+
+  if [[ -n "$pid" && -n "$pgid" ]] && process_matches "$pid" "dbus-run-session"; then
+    safe_kill_group "$pgid" TERM
     for _ in {1..40}; do
-      kill -0 "-$SHELL_PID" 2>/dev/null || break
+      kill -0 "$pid" 2>/dev/null || break
       sleep 0.1
     done
-    if kill -0 "-$SHELL_PID" 2>/dev/null; then
-      kill -KILL -- "-$SHELL_PID" 2>/dev/null || true
+    if kill -0 "$pid" 2>/dev/null; then
+      safe_kill_group "$pgid" KILL
     fi
-    wait "$SHELL_PID" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
   fi
+
   SHELL_PID=""
+  SHELL_PGID=""
+  clear_session_metadata
 }
 
 snapshot_state() {
@@ -405,20 +538,20 @@ cleanup() {
     kill "$WATCH_PID" 2>/dev/null || true
     wait "$WATCH_PID" 2>/dev/null || true
   fi
+  WATCH_PID=""
   stop_shell
   release_live_lock
 }
 
-if [[ $WATCH -ne 1 ]]; then
-  load_profile
-  prepare_preview_root
-  export_preview_env
-  print_banner
-  exec dbus-run-session -- bash -lc "$SESSION_SCRIPT"
-fi
-
 acquire_live_lock
 trap cleanup INT TERM EXIT
+
+if [[ $WATCH -ne 1 ]]; then
+  start_shell
+  wait "$SHELL_PID" 2>/dev/null || true
+  exit 0
+fi
+
 while true; do
   start_shell
   start_watcher
@@ -436,6 +569,7 @@ while true; do
   fi
 
   wait "$WATCH_PID" 2>/dev/null || true
+  WATCH_PID=""
   echo
   echo "Změna ve zdrojích, restartuji Shell Preview..."
   stop_shell
