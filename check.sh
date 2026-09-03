@@ -8,10 +8,14 @@ find "$ROOT" \
   -o -name '*.sh' -type f -print0 |
   xargs -0 -r -n1 bash -n
 
-python3 -m compileall -q "$ROOT/src/fedora_nova"
+python3 -m compileall -q \
+  "$ROOT/src/fedora_nova" \
+  "$ROOT/core/scripts"
 
 if command -v sassc >/dev/null 2>&1 || command -v sass >/dev/null 2>&1; then
   "$ROOT/core/scripts/build-theme-sass.sh" --check >/dev/null
+else
+  printf 'WARN: Sass compiler není dostupný; SCSS kontrola přeskočena.\n' >&2
 fi
 
 python3 - "$ROOT" <<'PY'
@@ -37,5 +41,5 @@ for path in source_files("*.json"):
 for path in list(source_files("*.xml")) + list(source_files("*.metainfo.xml")):
     ET.parse(path)
 
-print("Python, Bash, JSON a XML kontroly prošly.")
+print("Python, Bash, Sass, JSON a XML kontroly prošly.")
 PY
