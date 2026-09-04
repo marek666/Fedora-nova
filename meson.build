@@ -32,6 +32,7 @@ install_subdir(
   exclude_files: [
     'SHA256SUMS',
     'scripts/build-theme-sass.sh',
+    'scripts/preview_reload.py',
   ],
 )
 
