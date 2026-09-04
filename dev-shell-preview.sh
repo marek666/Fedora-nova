@@ -2,7 +2,46 @@
 set -euo pipefail
 
 ORIGINAL_ARGS=("$@")
-SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+SCRIPT_INVOKED_AS="${BASH_SOURCE[0]}"
+ENV_BIN="/usr/bin/env"
+[[ -x "$ENV_BIN" ]] || ENV_BIN="/bin/env"
+
+sanitize_shell_startup_env() {
+  local entry key needs_exec=0
+  local -a clean_env=()
+
+  if [[ ! -r "/proc/$$/environ" ]]; then
+    unset BASH_ENV ENV || true
+    return 0
+  fi
+
+  while IFS= read -r -d '' entry; do
+    key="${entry%%=*}"
+    case "$key" in
+      BASH_ENV|ENV)
+        needs_exec=1
+        continue
+        ;;
+    esac
+    clean_env+=("$entry")
+  done < "/proc/$$/environ"
+
+  unset BASH_ENV ENV || true
+  if [[ "$needs_exec" -ne 1 ]]; then
+    return 0
+  fi
+
+  if [[ ! -x "$ENV_BIN" ]]; then
+    echo "CHYBA: chybí env." >&2
+    exit 1
+  fi
+
+  exec "$ENV_BIN" -i "${clean_env[@]}" "$SCRIPT_INVOKED_AS" "${ORIGINAL_ARGS[@]}"
+}
+
+sanitize_shell_startup_env
+
+SCRIPT_PATH="$(readlink -f -- "$SCRIPT_INVOKED_AS")"
 ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)"
 CORE="$ROOT/core"
 PROFILE="tech"
@@ -112,6 +151,8 @@ while (($#)); do
   esac
   shift
 done
+
+unset BASH_ENV ENV || true
 
 # Bootstrap a token we generated ourselves. The inherited FD carries a one-shot
 # proof bound to the exec-preserved PID, so a plain environment variable is not
@@ -404,7 +445,7 @@ ERR
   exit 1
 fi
 
-for command_name in dbus-run-session setsid ps grep tr python3 readlink; do
+for command_name in dbus-run-session env setsid ps grep tr python3 readlink; do
   command -v "$command_name" >/dev/null 2>&1 || {
     echo "CHYBA: chybí $command_name." >&2
     exit 1
@@ -796,7 +837,7 @@ start_shell() {
   rm -f "$SHELL_CHILD_PID_FILE"
   # A non-login shell preserves the explicitly prepared preview environment.
   # We intentionally do not source /etc/profile or files from PREVIEW_HOME.
-  setsid dbus-run-session -- bash -c "$SESSION_SCRIPT" &
+  setsid dbus-run-session -- env -u BASH_ENV -u ENV bash -c "$SESSION_SCRIPT" &
   SHELL_PID=$!
 
   SHELL_PGID=""
