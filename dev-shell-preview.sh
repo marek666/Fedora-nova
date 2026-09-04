@@ -689,9 +689,19 @@ EOF
   printf 'tela\n' > "$PREVIEW_CONFIG/fedora-nova/current-icons"
   printf 'on\n' > "$PREVIEW_CONFIG/fedora-nova/current-gtk"
 
-  XDG_DATA_HOME="$PREVIEW_DATA" \
+  local tela_install_log="$PREVIEW_STATE/tela-install.log"
+  if ! XDG_DATA_HOME="$PREVIEW_DATA" \
+    XDG_CACHE_HOME="$PREVIEW_CACHE" \
     FEDORA_NOVA_APP_DIR="$CORE" \
-    "$CORE/scripts/install-tela-icons.sh" >/dev/null 2>&1 || true
+    "$CORE/scripts/install-tela-icons.sh" >"$tela_install_log" 2>&1; then
+    echo "CHYBA: nepodařilo se připravit Tela Circle pro Shell Preview." >&2
+    tail -n 80 "$tela_install_log" >&2 || true
+    return 1
+  fi
+  if [[ ! -f "$PREVIEW_DATA/icons/Tela-circle-dark/index.theme" ]]; then
+    echo "CHYBA: Tela-circle-dark se po instalaci v preview nenachází." >&2
+    return 1
+  fi
   XDG_CONFIG_HOME="$PREVIEW_CONFIG" \
     XDG_DATA_HOME="$PREVIEW_DATA" \
     XDG_STATE_HOME="$PREVIEW_STATE" \
@@ -730,7 +740,7 @@ export_preview_env() {
   export NOVA_PREVIEW_WALL="$WALL_PATH"
   export NOVA_PREVIEW_ACCENT="$ACCENT"
   export NOVA_PREVIEW_EXTENSIONS="$ENABLED"
-  export NOVA_PREVIEW_ICON_THEME="Tela-circle"
+  export NOVA_PREVIEW_ICON_THEME="Tela-circle-dark"
   export NOVA_PREVIEW_DOCK_COLOR="$DOCK_COLOR"
   export NOVA_PREVIEW_DOCK_OPACITY="$DOCK_OPACITY"
   export NOVA_PREVIEW_DOCK_SIZE="$DOCK_SIZE"

@@ -18,7 +18,7 @@ case "$ACTION" in
       CURRENT_THEME=""
     fi
     [[ -n "$CURRENT_THEME" && "$CURRENT_THEME" != "Fedora-Nova-Steam" ]] || \
-      CURRENT_THEME="$(cat "$STATE_ROOT/base-theme" 2>/dev/null || echo Tela-circle)"
+      CURRENT_THEME="$(cat "$STATE_ROOT/base-theme" 2>/dev/null || echo Tela-circle-dark)"
     PROFILE_JSON="$(python3 "$SCRIPT_DIR/profile-info.py" json "$(current_profile)" \
       "$NOVA_APP_DIR/config/profiles.json" "$NOVA_CUSTOM_DIR")"
     read -r ACCENT BACKGROUND < <(python3 -c \
@@ -44,11 +44,11 @@ case "$ACTION" in
     fi
     ;;
   restore)
-    BASE="$(cat "$STATE_ROOT/base-theme" 2>/dev/null || echo Tela-circle)"
+    BASE="$(cat "$STATE_ROOT/base-theme" 2>/dev/null || echo Tela-circle-dark)"
     try_set org.gnome.desktop.interface icon-theme "'$BASE'"
     python3 "$SCRIPT_DIR/steam-icons.py" "$BASE" '#2ED8E8' '#120C25' --restore-desktops >/dev/null 2>&1 || true
     rm -rf "$THEME_ROOT"
-    printf 'tela\n' > "$NOVA_CONFIG_DIR/current-icons"
+    printf 'tela-dark\n' > "$NOVA_CONFIG_DIR/current-icons"
     log "Obnoven icon theme i původní Icon= hodnoty launcherů: $BASE"
     ;;
   status)

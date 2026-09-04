@@ -125,7 +125,7 @@ current_curve() {
 
 current_icons() {
   local file="$NOVA_CONFIG_DIR/current-icons"
-  if [[ -s "$file" ]]; then cat "$file"; else printf 'tela\n'; fi
+  if [[ -s "$file" ]]; then cat "$file"; else printf 'tela-dark\n'; fi
 }
 
 current_hover() {

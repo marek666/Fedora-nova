@@ -6,10 +6,10 @@ source "$SCRIPT_DIR/lib.sh"
 choice="${1:-list}"
 case "$choice" in
   list)
-    printf '%-12s %s\n' tela 'Tela-circle (výchozí Fedora Nova 0.6)'
-    printf '%-12s %s\n' tela-dark 'Tela-circle-dark'
+    printf '%-12s %s\n' tela 'Tela-circle'
+    printf '%-12s %s\n' tela-dark 'Tela-circle-dark (výchozí Fedora Nova základ)'
     printf '%-12s %s\n' tela-light 'Tela-circle-light'
-    printf '%-12s %s\n' tela-steam 'Tela Circle + kruhové Steam herní ikony'
+    printf '%-12s %s\n' tela-steam 'Fedora Nova Steam overlay nad Tela-circle-dark'
     printf '%-12s %s\n' papirus 'Papirus-Dark'
     printf '%-12s %s\n' adwaita 'Adwaita (čistý GNOME vzhled)'
     exit 0
@@ -18,7 +18,7 @@ case "$choice" in
   tela-dark) theme='Tela-circle-dark' ;;
   tela-light) theme='Tela-circle-light' ;;
   tela-steam)
-    "$SCRIPT_DIR/apply-icons.sh" tela
+    "$SCRIPT_DIR/apply-icons.sh" tela-dark
     "$SCRIPT_DIR/steam-icons.sh" round
     exit 0
     ;;
