@@ -38,6 +38,50 @@ SHELL_PGID=""
 SHELL_CHILD_PID=""
 WATCH_PID=""
 
+is_bootstrap_fd() {
+  local fd="${1:-}"
+  [[ "$fd" =~ ^[0-9]+$ ]] || return 1
+  ((fd >= 10))
+}
+
+close_bootstrap_fd() {
+  local fd="${1:-}"
+  is_bootstrap_fd "$fd" || return 0
+  exec {fd}<&- 2>/dev/null || true
+}
+
+bootstrap_proof_valid() {
+  local fd="${NOVA_PREVIEW_TOKEN_BOOTSTRAP_FD:-}"
+  local proof="" proof_pid="" proof_token=""
+
+  is_bootstrap_fd "$fd" || return 1
+  [[ -e "/proc/$$/fd/$fd" ]] || return 1
+  if ! IFS= read -r -t 1 -u "$fd" proof 2>/dev/null; then
+    return 1
+  fi
+
+  proof_pid="${proof%%:*}"
+  proof_token="${proof#*:}"
+  [[ "$proof_pid" == "$$" ]] || return 1
+  [[ "$proof_token" == "${NOVA_PREVIEW_TOKEN:-}" ]] || return 1
+  [[ "$proof_token" =~ ^[0-9a-fA-F]{32}$ ]]
+}
+
+bootstrap_preview_token() {
+  local preview_uuid="" proof_fd=""
+
+  if [[ ! -r /proc/sys/kernel/random/uuid ]]; then
+    echo "CHYBA: nelze vytvořit bezpečný identifikátor Shell Preview." >&2
+    exit 1
+  fi
+
+  preview_uuid="$(</proc/sys/kernel/random/uuid)"
+  export NOVA_PREVIEW_TOKEN="${preview_uuid//-/}"
+  exec {proof_fd}<<<"$$:$NOVA_PREVIEW_TOKEN"
+  export NOVA_PREVIEW_TOKEN_BOOTSTRAP_FD="$proof_fd"
+  exec "$SCRIPT_PATH" "${ORIGINAL_ARGS[@]}"
+}
+
 usage() {
   cat <<'USAGE'
 Fedora Nova Shell Preview
@@ -68,18 +112,18 @@ while (($#)); do
   shift
 done
 
-# Bootstrap a token we generated ourselves. The marker is tied to this PID;
-# exec preserves it, while an ordinary external caller cannot know it in advance.
+# Bootstrap a token we generated ourselves. The inherited FD carries a one-shot
+# proof bound to the exec-preserved PID, so a plain environment variable is not
+# enough to skip token generation.
 if [[ $STOP -ne 1 ]]; then
-  if [[ "${NOVA_PREVIEW_TOKEN_BOOTSTRAP_PID:-}" != "$$" ]]; then
-    if [[ ! -r /proc/sys/kernel/random/uuid ]]; then
-      echo "CHYBA: nelze vytvořit bezpečný identifikátor Shell Preview." >&2
-      exit 1
-    fi
-    preview_uuid="$(</proc/sys/kernel/random/uuid)"
-    export NOVA_PREVIEW_TOKEN="${preview_uuid//-/}"
-    export NOVA_PREVIEW_TOKEN_BOOTSTRAP_PID="$$"
-    exec "$SCRIPT_PATH" "${ORIGINAL_ARGS[@]}"
+  unset NOVA_PREVIEW_TOKEN_BOOTSTRAP_PID || true
+  bootstrap_fd="${NOVA_PREVIEW_TOKEN_BOOTSTRAP_FD:-}"
+  if bootstrap_proof_valid; then
+    close_bootstrap_fd "$bootstrap_fd"
+    unset NOVA_PREVIEW_TOKEN_BOOTSTRAP_FD
+  else
+    close_bootstrap_fd "$bootstrap_fd"
+    bootstrap_preview_token
   fi
 
   if [[ ! "${NOVA_PREVIEW_TOKEN:-}" =~ ^[0-9a-fA-F]{32}$ ]]; then
