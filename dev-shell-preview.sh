@@ -37,6 +37,7 @@ SHELL_PID=""
 SHELL_PGID=""
 SHELL_CHILD_PID=""
 WATCH_PID=""
+CLEANUP_DONE=0
 
 is_bootstrap_fd() {
   local fd="${1:-}"
@@ -156,18 +157,6 @@ read_token_file() {
   return 0
 }
 
-read_session_format() {
-  local line value=""
-  [[ -r "$SESSION_META_FILE" ]] || return 0
-  while IFS= read -r line; do
-    case "$line" in
-      format_version=*) value="${line#format_version=}"; break ;;
-    esac
-  done < "$SESSION_META_FILE"
-  [[ "$value" =~ ^[0-9]+$ ]] && printf '%s\n' "$value"
-  return 0
-}
-
 process_cmdline() {
   local pid="$1"
   [[ -r "/proc/$pid/cmdline" ]] || return 1
@@ -201,12 +190,6 @@ session_matches_token() {
   local pid="$1"
   local token="$2"
   process_matches "$pid" "dbus-run-session" && process_has_token "$pid" "$token"
-}
-
-legacy_supervisor_matches() {
-  local pid="$1"
-  process_matches "$pid" "dev-shell-preview.sh" ||
-    process_matches "$pid" "fedora-nova-shell-preview"
 }
 
 pid_pgid() {
@@ -313,48 +296,12 @@ clear_session_metadata() {
   rm -f "$SESSION_PID_FILE" "$SESSION_PGID_FILE" "$SHELL_CHILD_PID_FILE" "$SESSION_META_FILE"
 }
 
-stop_legacy_session() {
-  local pid="$1"
-  local stored_pgid="$2"
-  local actual_pgid=""
-
-  if ! process_matches "$pid" "dbus-run-session"; then
-    if ! pid_alive "$pid"; then
-      clear_session_metadata
-      return 0
-    fi
-    echo "CHYBA: legacy session PID neodpovídá dbus-run-session; metadata ponechávám." >&2
-    return 2
-  fi
-
-  actual_pgid="$(pid_pgid "$pid")"
-  if ! is_pid "$actual_pgid"; then
-    echo "CHYBA: nelze ověřit legacy process group; metadata ponechávám." >&2
-    return 2
-  fi
-
-  if is_pid "$stored_pgid" && [[ "$stored_pgid" != "$actual_pgid" ]]; then
-    echo "VAROVÁNÍ: legacy PGID se změnilo, používám aktuální $actual_pgid." >&2
-  fi
-
-  safe_kill_group "$actual_pgid" TERM
-  for _ in {1..40}; do
-    pid_alive "$pid" || break
-    sleep 0.1
-  done
-  if pid_alive "$pid"; then
-    safe_kill_group "$actual_pgid" KILL
-  fi
-  clear_session_metadata
-}
-
 stop_recorded_session() {
-  local session_pid stored_pgid shell_pid token format pgid
+  local session_pid stored_pgid shell_pid token pgid
   session_pid="$(read_pid_file "$SESSION_PID_FILE")"
   stored_pgid="$(read_pid_file "$SESSION_PGID_FILE")"
   shell_pid="$(read_pid_file "$SHELL_CHILD_PID_FILE")"
   token="$(read_token_file)"
-  format="$(read_session_format)"
 
   if [[ -z "$session_pid" && -z "$shell_pid" ]]; then
     clear_session_metadata
@@ -362,27 +309,33 @@ stop_recorded_session() {
   fi
 
   if [[ -z "$token" ]]; then
-    if [[ -n "$format" && "$format" -ge 2 ]]; then
-      if pid_alive "$session_pid" || pid_alive "$shell_pid"; then
-        echo "CHYBA: runtime metadata vyžadují token, ale preview.token chybí nebo je poškozený." >&2
-        return 2
-      fi
-      clear_session_metadata
-      return 0
+    if pid_alive "$session_pid" || pid_alive "$shell_pid"; then
+      echo "CHYBA: preview.token chybí nebo je poškozený; běžící preview nelze bezpečně ověřit." >&2
+      return 2
     fi
-    stop_legacy_session "$session_pid" "$stored_pgid"
-    return $?
+    clear_session_metadata
+    return 0
   fi
 
   pgid="$(resolve_token_group "$session_pid" "$shell_pid" "$stored_pgid" "$token")" || true
   if is_pid "$pgid"; then
-    safe_kill_group "$pgid" TERM
+    if ! safe_kill_group "$pgid" TERM; then
+      echo "CHYBA: ověřenou process group nelze bezpečně ukončit; metadata ponechávám." >&2
+      return 2
+    fi
     for _ in {1..40}; do
       group_has_token "$pgid" "$token" || break
       sleep 0.1
     done
     if group_has_token "$pgid" "$token"; then
-      safe_kill_group "$pgid" KILL
+      if ! safe_kill_group "$pgid" KILL; then
+        echo "CHYBA: ověřenou process group nelze bezpečně dorazit; metadata ponechávám." >&2
+        return 2
+      fi
+    fi
+    if group_has_token "$pgid" "$token"; then
+      echo "CHYBA: ověřená process group po cleanupu stále běží; metadata ponechávám." >&2
+      return 2
     fi
     clear_session_metadata
     return 0
@@ -398,10 +351,9 @@ stop_recorded_session() {
 }
 
 stop_external_preview() {
-  local supervisor token format stop_rc=0
+  local supervisor token stop_rc=0
   supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
   token="$(read_token_file)"
-  format="$(read_session_format)"
 
   if pid_alive "$supervisor"; then
     if [[ -n "$token" ]] && supervisor_matches_token "$supervisor" "$token"; then
@@ -413,12 +365,6 @@ stop_external_preview() {
       if pid_alive "$supervisor" && supervisor_matches_token "$supervisor" "$token"; then
         kill -KILL "$supervisor" 2>/dev/null || true
       fi
-    elif [[ -z "$token" && ( -z "$format" || "$format" -lt 2 ) ]] && legacy_supervisor_matches "$supervisor"; then
-      kill -TERM "$supervisor" 2>/dev/null || true
-      for _ in {1..40}; do
-        pid_alive "$supervisor" || break
-        sleep 0.1
-      done
     else
       echo "CHYBA: supervisor běží, ale runtime token/metadata mu neodpovídají; nic nemažu." >&2
       return 2
@@ -580,17 +526,12 @@ acquire_live_lock() {
     return 0
   fi
 
-  local supervisor recorded_token format
+  local supervisor recorded_token
   supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
   recorded_token="$(read_token_file)"
-  format="$(read_session_format)"
 
   if pid_alive "$supervisor"; then
     if [[ -n "$recorded_token" ]] && supervisor_matches_token "$supervisor" "$recorded_token"; then
-      echo "Shell Preview už běží. Zavři jeho okno nebo spusť ./dev-shell-preview.sh --stop." >&2
-      exit 2
-    fi
-    if [[ -z "$recorded_token" && ( -z "$format" || "$format" -lt 2 ) ]] && legacy_supervisor_matches "$supervisor"; then
       echo "Shell Preview už běží. Zavři jeho okno nebo spusť ./dev-shell-preview.sh --stop." >&2
       exit 2
     fi
@@ -614,10 +555,16 @@ release_live_lock() {
   local supervisor token
   supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
   token="$(read_token_file)"
-  if [[ "$supervisor" == "$$" && "$token" == "${NOVA_PREVIEW_TOKEN:-}" ]]; then
+  if [[ ! -d "$LIVE_LOCK_DIR" && -z "$supervisor" && -z "$token" ]]; then
+    return 0
+  fi
+  if [[ "$supervisor" == "$$" && -n "$token" && "$token" == "${NOVA_PREVIEW_TOKEN:-}" ]]; then
     rm -rf "$LIVE_LOCK_DIR"
     rm -f "$SUPERVISOR_PID_FILE" "$TOKEN_FILE"
+    return 0
   fi
+  echo "CHYBA: live lock nepatří tomuto ověřenému preview procesu; diagnostiku ponechávám." >&2
+  return 2
 }
 
 load_profile() {
@@ -937,8 +884,13 @@ cleanup() {
   WATCH_PID=""
 
   if stop_shell; then
-    release_live_lock
-    return 0
+    if release_live_lock; then
+      return 0
+    else
+      rc=$?
+      echo "VAROVÁNÍ: live lock nebyl bezpečně uvolněn; runtime metadata ponechávám." >&2
+      return "$rc"
+    fi
   else
     rc=$?
     echo "VAROVÁNÍ: preview session nebyla bezpečně uklizena; runtime metadata ponechávám." >&2
@@ -946,24 +898,78 @@ cleanup() {
   fi
 }
 
+run_cleanup_once() {
+  if [[ "$CLEANUP_DONE" -eq 1 ]]; then
+    return 0
+  fi
+  CLEANUP_DONE=1
+  cleanup
+}
+
+exit_with_cleanup() {
+  local main_rc="$1"
+  local cleanup_rc=0
+
+  trap - EXIT INT TERM
+  if run_cleanup_once; then
+    cleanup_rc=0
+  else
+    cleanup_rc=$?
+  fi
+
+  if [[ "$main_rc" -ne 0 ]]; then
+    exit "$main_rc"
+  fi
+  exit "$cleanup_rc"
+}
+
+handle_exit() {
+  local main_rc=$?
+  exit_with_cleanup "$main_rc"
+}
+
+handle_int() {
+  exit_with_cleanup 130
+}
+
+handle_term() {
+  exit_with_cleanup 143
+}
+
 acquire_live_lock
-trap cleanup INT TERM EXIT
+trap handle_exit EXIT
+trap handle_int INT
+trap handle_term TERM
 
 if [[ $WATCH -ne 1 ]]; then
-  start_shell
+  if start_shell; then
+    :
+  else
+    rc=$?
+    exit_with_cleanup "$rc"
+  fi
   wait "$SHELL_PID" 2>/dev/null || true
-  exit 0
+  exit_with_cleanup 0
 fi
 
 while true; do
-  start_shell
+  if start_shell; then
+    :
+  else
+    rc=$?
+    exit_with_cleanup "$rc"
+  fi
   start_watcher
 
   wait -n "$SHELL_PID" "$WATCH_PID" 2>/dev/null || true
 
   if ! kill -0 "$SHELL_PID" 2>/dev/null; then
-    stop_shell
-    exit 0
+    if stop_shell; then
+      exit_with_cleanup 0
+    else
+      rc=$?
+      exit_with_cleanup "$rc"
+    fi
   fi
 
   if kill -0 "$WATCH_PID" 2>/dev/null; then
@@ -975,6 +981,11 @@ while true; do
   WATCH_PID=""
   echo
   echo "Změna ve zdrojích, restartuji Shell Preview..."
-  stop_shell
+  if stop_shell; then
+    :
+  else
+    rc=$?
+    exit_with_cleanup "$rc"
+  fi
   sleep 0.5
 done
