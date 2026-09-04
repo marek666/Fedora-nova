@@ -60,12 +60,13 @@ install_theme_trash_icons() {
   done
 
   # GNOME Shell/St.Icon can prefer symbolic variants even when the themed icon
-  # starts as "user-trash". Override those lookups too so Dash-to-Dock and
-  # other Shell surfaces use the Fedora Nova rounded trash artwork.
+  # starts as "user-trash". Ensure the symbolic lookup directories exist for
+  # every bundled Tela variant (Tela-circle-light omits them in the archive),
+  # then install the Fedora Nova rounded trash artwork there too.
   for dir in \
     "$root/symbolic/places" \
     "$root/symbolic/status"; do
-    [[ -d "$dir" ]] || continue
+    mkdir -p "$dir"
     for name in user-trash-symbolic trash-empty-symbolic; do
       copy_icon "$EMPTY_ICON" "$dir/$name.svg"
       copied=$((copied + 1))
