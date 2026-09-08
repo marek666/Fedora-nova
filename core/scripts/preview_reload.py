@@ -70,6 +70,7 @@ THEME_GLOBS = (
     "core/scripts/hover_style.py",
     "core/scripts/curve_style.py",
     "core/scripts/build-theme-sass.sh",
+    "core/scripts/theme_hot_reload.py",
     "core/config/curves.json",
 )
 
@@ -615,17 +616,157 @@ def watch_once(
     )
 
 
+def _required_env(name: str) -> str:
+    value = os.environ.get(name, "")
+    if not value:
+        raise RuntimeError(f"required preview environment is missing: {name}")
+    return value
+
+
+def _read_positive_pid(path: Path) -> int:
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+        pid = int(text)
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"cannot read nested Shell PID from {path}: {exc}") from exc
+    if pid <= 0:
+        raise RuntimeError(f"invalid nested Shell PID in {path}")
+    return pid
+
+
+def _repo_state_changes(
+    before: dict[str, tuple[object, ...]],
+    after: dict[str, tuple[object, ...]],
+) -> set[str]:
+    return {
+        path
+        for path in before.keys() | after.keys()
+        if before.get(path) != after.get(path)
+    }
+
+
+def _run_theme_hot_reload(repo_root: Path, token: str) -> str:
+    if not _valid_preview_token(token):
+        raise RuntimeError("preview token is missing or invalid")
+
+    helper = repo_root / "core" / "scripts" / "theme_hot_reload.py"
+    if not helper.is_file():
+        raise RuntimeError(f"theme hot reload helper is missing: {helper}")
+
+    shell_pid_file = Path(_required_env("NOVA_PREVIEW_SHELL_PID_FILE"))
+    shell_pid = _read_positive_pid(shell_pid_file)
+    if not _process_has_token(shell_pid, token):
+        raise RuntimeError("nested Shell PID is not owned by this preview token")
+
+    preview_home = Path(_required_env("HOME"))
+    preview_config = Path(_required_env("XDG_CONFIG_HOME"))
+    preview_data = Path(_required_env("XDG_DATA_HOME"))
+    preview_state = Path(_required_env("XDG_STATE_HOME"))
+    theme = _required_env("NOVA_PREVIEW_THEME")
+
+    profile_file = preview_config / "fedora-nova" / "current-profile"
+    try:
+        profile = profile_file.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise RuntimeError(f"cannot read preview profile: {exc}") from exc
+    if not profile:
+        raise RuntimeError("preview profile is empty")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            os.fspath(helper),
+            "--repo-root",
+            os.fspath(repo_root),
+            "--profile",
+            profile,
+            "--theme",
+            theme,
+            "--preview-home",
+            os.fspath(preview_home),
+            "--preview-config",
+            os.fspath(preview_config),
+            "--preview-data",
+            os.fspath(preview_data),
+            "--preview-state",
+            os.fspath(preview_state),
+            "--shell-pid",
+            str(shell_pid),
+        ],
+        env=os.environ.copy(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        if not detail:
+            detail = f"exit status {completed.returncode}"
+        raise RuntimeError(detail)
+    return theme
+
+
+def _print_hot_reload_success(details: list[dict[str, str]], theme: str) -> None:
+    print(file=sys.stderr)
+    print(f"Smart watch: {THEME_RELOAD} ({len(details)} změn)", file=sys.stderr)
+    for item in details[:8]:
+        print(
+            f"  {json.dumps(item['path'], ensure_ascii=False)}",
+            file=sys.stderr,
+        )
+    print(f"Hot reload: {theme} načten bez restartu Shell Preview.", file=sys.stderr)
+
+
 def _cmd_watch_once(args: argparse.Namespace) -> int:
     token = os.environ.get("NOVA_PREVIEW_TOKEN") if args.supervisor_pid else None
+    root = Path(args.repo_root)
     try:
-        action, details = watch_once(
-            Path(args.repo_root),
-            debounce_seconds=args.debounce_ms / 1000.0,
-            poll_seconds=args.poll_ms / 1000.0,
-            collector=args.collector,
-            supervisor_pid=args.supervisor_pid,
-            supervisor_token=token,
-        )
+        while True:
+            action, details = watch_once(
+                root,
+                debounce_seconds=args.debounce_ms / 1000.0,
+                poll_seconds=args.poll_ms / 1000.0,
+                collector=args.collector,
+                supervisor_pid=args.supervisor_pid,
+                supervisor_token=token,
+            )
+
+            # A token-bound preview watcher can consume pure theme changes itself.
+            # Keep the supervisor blocked on this process so a successful reload
+            # does not tear down the nested Shell. Standalone watch-once keeps its
+            # original single-result behavior for tests and diagnostics.
+            if action != THEME_RELOAD or args.supervisor_pid is None or token is None:
+                break
+
+            before = _scan_repo_state(root)
+            try:
+                theme = _run_theme_hot_reload(root.resolve(strict=True), token)
+            except (OSError, RuntimeError, ValueError) as exc:
+                print(
+                    f"VAROVÁNÍ: theme hot reload selhal ({exc}); používám bezpečný restart fallback.",
+                    file=sys.stderr,
+                )
+                break
+
+            after = _scan_repo_state(root)
+            changed_during_reload = _repo_state_changes(before, after)
+            if changed_during_reload:
+                combined = {
+                    item["path"] for item in details if item.get("path")
+                } | changed_during_reload
+                _, details = classify_paths(sorted(combined), root)
+                action = FULL_SHELL_RESTART
+                print(
+                    "VAROVÁNÍ: repozitář se změnil během hot reloadu; používám bezpečný restart fallback.",
+                    file=sys.stderr,
+                )
+                break
+
+            _print_hot_reload_success(details, theme)
+            # Re-arm the collector and keep the same token-bound watcher alive.
+            # The before/after reconciliation above closes the build-time gap;
+            # the existing conservative fallback remains available for failures.
     except SupervisorGone:
         # The supervisor owns this process. If it disappears abruptly there is
         # nobody left to consume a result, so exit quietly after child cleanup.
