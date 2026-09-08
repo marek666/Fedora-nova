@@ -70,6 +70,8 @@ SESSION_PGID_FILE="$RUNTIME_DIR/session.pgid"
 SHELL_CHILD_PID_FILE="$RUNTIME_DIR/shell.pid"
 SESSION_META_FILE="$RUNTIME_DIR/session.env"
 TOKEN_FILE="$RUNTIME_DIR/preview.token"
+WATCHER_PID_FILE="$RUNTIME_DIR/watcher.pid"
+WATCHER_PGID_FILE="$RUNTIME_DIR/watcher.pgid"
 WATCH_RESULT_FILE="$RUNTIME_DIR/watch-result.json"
 PREVIEW_RELOAD_HELPER="$CORE/scripts/preview_reload.py"
 
@@ -78,6 +80,7 @@ SHELL_PID=""
 SHELL_PGID=""
 SHELL_CHILD_PID=""
 WATCH_PID=""
+WATCH_PGID=""
 CLEANUP_DONE=0
 
 is_bootstrap_fd() {
@@ -185,6 +188,11 @@ pid_alive() {
   is_pid "$pid" && kill -0 "$pid" 2>/dev/null
 }
 
+group_alive() {
+  local pgid="$1"
+  is_pid "$pgid" && kill -0 -- "-$pgid" 2>/dev/null
+}
+
 read_pid_file() {
   local path="$1"
   local value=""
@@ -235,6 +243,14 @@ session_matches_token() {
   process_matches "$pid" "dbus-run-session" && process_has_token "$pid" "$token"
 }
 
+watcher_matches_token() {
+  local pid="$1"
+  local token="$2"
+  process_matches "$pid" "$PREVIEW_RELOAD_HELPER" && \
+    process_matches "$pid" "watch-once" && \
+    process_has_token "$pid" "$token"
+}
+
 pid_pgid() {
   local pid="$1"
   is_pid "$pid" || return 1
@@ -274,6 +290,28 @@ resolve_token_group() {
 
   if process_has_token "$shell_pid" "$token"; then
     actual="$(pid_pgid "$shell_pid")"
+    if is_pid "$actual"; then
+      printf '%s\n' "$actual"
+      return 0
+    fi
+  fi
+
+  if is_pid "$stored_pgid" && group_has_token "$stored_pgid" "$token"; then
+    printf '%s\n' "$stored_pgid"
+    return 0
+  fi
+
+  return 1
+}
+
+resolve_watcher_group() {
+  local watcher_pid="$1"
+  local stored_pgid="$2"
+  local token="$3"
+  local actual=""
+
+  if watcher_matches_token "$watcher_pid" "$token"; then
+    actual="$(pid_pgid "$watcher_pid")"
     if is_pid "$actual"; then
       printf '%s\n' "$actual"
       return 0
@@ -339,6 +377,67 @@ clear_session_metadata() {
   rm -f "$SESSION_PID_FILE" "$SESSION_PGID_FILE" "$SHELL_CHILD_PID_FILE" "$SESSION_META_FILE"
 }
 
+clear_watcher_metadata() {
+  rm -f "$WATCHER_PID_FILE" "$WATCHER_PGID_FILE"
+}
+
+stop_recorded_watcher() {
+  local watcher_pid stored_pgid token pgid
+  watcher_pid="$(read_pid_file "$WATCHER_PID_FILE")"
+  stored_pgid="$(read_pid_file "$WATCHER_PGID_FILE")"
+  token="$(read_token_file)"
+
+  if [[ -z "$watcher_pid" && -z "$stored_pgid" ]]; then
+    clear_watcher_metadata
+    return 0
+  fi
+
+  if [[ -z "$token" ]]; then
+    if pid_alive "$watcher_pid" || group_alive "$stored_pgid"; then
+      echo "CHYBA: preview.token chybí nebo je poškozený; běžící watcher nelze bezpečně ověřit." >&2
+      return 2
+    fi
+    clear_watcher_metadata
+    return 0
+  fi
+
+  pgid="$(resolve_watcher_group "$watcher_pid" "$stored_pgid" "$token")" || true
+  if is_pid "$pgid"; then
+    if ! safe_kill_group "$pgid" TERM; then
+      echo "CHYBA: ověřenou watcher process group nelze bezpečně ukončit; metadata ponechávám." >&2
+      return 2
+    fi
+    for _ in {1..30}; do
+      group_has_token "$pgid" "$token" || break
+      sleep 0.1
+    done
+    if group_has_token "$pgid" "$token"; then
+      if ! safe_kill_group "$pgid" KILL; then
+        echo "CHYBA: ověřenou watcher process group nelze bezpečně dorazit; metadata ponechávám." >&2
+        return 2
+      fi
+    fi
+    if group_has_token "$pgid" "$token"; then
+      echo "CHYBA: watcher process group po cleanupu stále běží; metadata ponechávám." >&2
+      return 2
+    fi
+    clear_watcher_metadata
+    return 0
+  fi
+
+  if pid_alive "$watcher_pid"; then
+    echo "CHYBA: token Shell Preview neodpovídá běžícímu watcheru; nic jsem neukončil." >&2
+    return 2
+  fi
+  if group_alive "$stored_pgid"; then
+    echo "CHYBA: zaznamenaná watcher process group stále běží, ale nelze ji tokenem ověřit; nic jsem neukončil." >&2
+    return 2
+  fi
+
+  clear_watcher_metadata
+  return 0
+}
+
 stop_recorded_session() {
   local session_pid stored_pgid shell_pid token pgid
   session_pid="$(read_pid_file "$SESSION_PID_FILE")"
@@ -394,7 +493,7 @@ stop_recorded_session() {
 }
 
 stop_external_preview() {
-  local supervisor token stop_rc=0
+  local supervisor token watcher_rc=0 session_rc=0
   supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
   token="$(read_token_file)"
 
@@ -407,6 +506,14 @@ stop_external_preview() {
       done
       if pid_alive "$supervisor" && supervisor_matches_token "$supervisor" "$token"; then
         kill -KILL "$supervisor" 2>/dev/null || true
+        for _ in {1..20}; do
+          pid_alive "$supervisor" || break
+          sleep 0.1
+        done
+      fi
+      if pid_alive "$supervisor"; then
+        echo "CHYBA: supervisor se nepodařilo zastavit; runtime metadata ponechávám." >&2
+        return 2
       fi
     else
       echo "CHYBA: supervisor běží, ale runtime token/metadata mu neodpovídají; nic nemažu." >&2
@@ -414,16 +521,28 @@ stop_external_preview() {
     fi
   fi
 
+  if stop_recorded_watcher; then
+    :
+  else
+    watcher_rc=$?
+  fi
+
   if stop_recorded_session; then
     :
   else
-    stop_rc=$?
+    session_rc=$?
+  fi
+
+  if [[ "$watcher_rc" -ne 0 || "$session_rc" -ne 0 ]]; then
     echo "CHYBA: Shell Preview nebylo možné bezpečně zastavit; runtime metadata zůstávají zachována." >&2
-    return "$stop_rc"
+    if [[ "$watcher_rc" -ne 0 ]]; then
+      return "$watcher_rc"
+    fi
+    return "$session_rc"
   fi
 
   rm -rf "$LIVE_LOCK_DIR"
-  rm -f "$SUPERVISOR_PID_FILE" "$TOKEN_FILE"
+  rm -f "$SUPERVISOR_PID_FILE" "$TOKEN_FILE" "$WATCH_RESULT_FILE"
   echo "Shell Preview zastaveno."
 }
 
@@ -453,15 +572,6 @@ for command_name in dbus-run-session env setsid ps grep tr python3 readlink; do
     exit 1
   }
 done
-
-if ! command -v inotifywait >/dev/null 2>&1; then
-  for command_name in find sort sha256sum; do
-    command -v "$command_name" >/dev/null 2>&1 || {
-      echo "CHYBA: bez inotifywait chybí fallback nástroj $command_name." >&2
-      exit 1
-    }
-  done
-fi
 
 PROFILE_JSON="$CORE/config/profiles.json"
 [[ -f "$PROFILE_JSON" ]] || {
@@ -586,6 +696,10 @@ acquire_live_lock() {
     exit 2
   fi
 
+  if ! stop_recorded_watcher; then
+    echo "CHYBA: stale watcher nelze bezpečně uklidit; live lock zachovávám." >&2
+    exit 2
+  fi
   if ! stop_recorded_session; then
     echo "CHYBA: stale preview nelze bezpečně uklidit; live lock zachovávám." >&2
     exit 2
@@ -763,7 +877,7 @@ print_banner() {
   echo "Izolace:     $PREVIEW_ROOT"
   echo "Home:        izolovaný"
   if [[ $WATCH -eq 1 ]]; then
-    echo "Live:        smart watch (full-restart fallback)"
+    echo "Live:        smart watch (inotify + polling fallback, full-restart apply)"
   fi
   if [[ "${NOVA_PREVIEW_A11Y:-0}" == "1" ]]; then
     echo "A11y bridge: zapnutý"
@@ -926,49 +1040,99 @@ allowed = {
     "CONFIG_REFRESH",
     "FULL_SHELL_RESTART",
 }
+if not isinstance(data, dict):
+    raise SystemExit("invalid smart-watch result schema")
+
 action = data.get("action")
 changes = data.get("changes")
-if action not in allowed or not isinstance(changes, list):
+if not isinstance(action, str) or action not in allowed or not isinstance(changes, list):
     raise SystemExit("invalid smart-watch result schema")
+
+for item in changes:
+    if not isinstance(item, dict):
+        raise SystemExit("invalid smart-watch change record")
+    item_path = item.get("path")
+    item_action = item.get("action")
+    if (
+        not isinstance(item_path, str)
+        or not item_path
+        or not isinstance(item_action, str)
+        or item_action not in allowed
+    ):
+        raise SystemExit("invalid smart-watch change record")
 
 print(action)
 print(len(changes))
 for item in changes[:8]:
-    value = item.get("path", "") if isinstance(item, dict) else ""
-    print(json.dumps(value, ensure_ascii=False))
+    print(json.dumps(item["path"], ensure_ascii=False))
 PYJSON
 }
 
 start_watcher() {
   rm -f "$WATCH_RESULT_FILE"
-  python3 "$PREVIEW_RELOAD_HELPER" watch-once \
+  setsid python3 "$PREVIEW_RELOAD_HELPER" watch-once \
     --repo-root "$ROOT" \
     --debounce-ms "${NOVA_PREVIEW_WATCH_DEBOUNCE_MS:-250}" \
-    --poll-ms "${NOVA_PREVIEW_WATCH_POLL_MS:-100}" \
+    --poll-ms "${NOVA_PREVIEW_WATCH_POLL_MS:-500}" \
+    --collector "${NOVA_PREVIEW_WATCH_COLLECTOR:-auto}" \
+    --supervisor-pid "$$" \
     --json >"$WATCH_RESULT_FILE" &
   WATCH_PID=$!
+
+  WATCH_PGID=""
+  for _ in {1..20}; do
+    WATCH_PGID="$(pid_pgid "$WATCH_PID")"
+    is_pid "$WATCH_PGID" && break
+    kill -0 "$WATCH_PID" 2>/dev/null || break
+    sleep 0.05
+  done
+  if ! is_pid "$WATCH_PGID"; then
+    wait "$WATCH_PID" 2>/dev/null || true
+    WATCH_PID=""
+    echo "CHYBA: nepodařilo se zjistit process group smart watcheru." >&2
+    return 1
+  fi
+
+  write_pid_file "$WATCHER_PID_FILE" "$WATCH_PID"
+  write_pid_file "$WATCHER_PGID_FILE" "$WATCH_PGID"
 }
 
 cleanup() {
-  local rc=0
-  if [[ -n "${WATCH_PID:-}" ]] && kill -0 "$WATCH_PID" 2>/dev/null; then
-    kill "$WATCH_PID" 2>/dev/null || true
+  local watcher_rc=0 shell_rc=0 lock_rc=0
+
+  if stop_recorded_watcher; then
+    :
+  else
+    watcher_rc=$?
+    echo "VAROVÁNÍ: smart watcher nebyl bezpečně uklizen; runtime metadata ponechávám." >&2
+  fi
+  if is_pid "${WATCH_PID:-}"; then
     wait "$WATCH_PID" 2>/dev/null || true
   fi
   WATCH_PID=""
+  WATCH_PGID=""
 
   if stop_shell; then
-    if release_live_lock; then
-      return 0
-    else
-      rc=$?
-      echo "VAROVÁNÍ: live lock nebyl bezpečně uvolněn; runtime metadata ponechávám." >&2
-      return "$rc"
-    fi
+    :
   else
-    rc=$?
+    shell_rc=$?
     echo "VAROVÁNÍ: preview session nebyla bezpečně uklizena; runtime metadata ponechávám." >&2
-    return "$rc"
+  fi
+
+  if [[ "$watcher_rc" -ne 0 || "$shell_rc" -ne 0 ]]; then
+    if [[ "$watcher_rc" -ne 0 ]]; then
+      return "$watcher_rc"
+    fi
+    return "$shell_rc"
+  fi
+
+  if release_live_lock; then
+    rm -f "$WATCH_RESULT_FILE"
+    return 0
+  else
+    lock_rc=$?
+    echo "VAROVÁNÍ: live lock nebyl bezpečně uvolněn; runtime metadata ponechávám." >&2
+    return "$lock_rc"
   fi
 }
 
@@ -1033,56 +1197,87 @@ while true; do
     rc=$?
     exit_with_cleanup "$rc"
   fi
-  start_watcher
 
-  wait -n "$SHELL_PID" "$WATCH_PID" 2>/dev/null || true
-
-  if ! kill -0 "$SHELL_PID" 2>/dev/null; then
-    if stop_shell; then
-      exit_with_cleanup 0
+  while true; do
+    if start_watcher; then
+      :
     else
       rc=$?
       exit_with_cleanup "$rc"
     fi
-  fi
 
-  watcher_rc=0
-  if wait "$WATCH_PID"; then
+    wait -n "$SHELL_PID" "$WATCH_PID" 2>/dev/null || true
+
+    if ! kill -0 "$SHELL_PID" 2>/dev/null; then
+      if stop_recorded_watcher; then
+        :
+      else
+        rc=$?
+        exit_with_cleanup "$rc"
+      fi
+      if is_pid "$WATCH_PID"; then
+        wait "$WATCH_PID" 2>/dev/null || true
+      fi
+      WATCH_PID=""
+      WATCH_PGID=""
+
+      if stop_shell; then
+        exit_with_cleanup 0
+      else
+        rc=$?
+        exit_with_cleanup "$rc"
+      fi
+    fi
+
     watcher_rc=0
-  else
-    watcher_rc=$?
-  fi
-  WATCH_PID=""
-  if [[ "$watcher_rc" -ne 0 ]]; then
-    echo "CHYBA: smart watcher skončil s kódem $watcher_rc." >&2
-    exit_with_cleanup "$watcher_rc"
-  fi
+    if wait "$WATCH_PID"; then
+      watcher_rc=0
+    else
+      watcher_rc=$?
+    fi
+    WATCH_PID=""
+    WATCH_PGID=""
 
-  watch_text="$(read_watch_result "$WATCH_RESULT_FILE")" || {
-    echo "CHYBA: výsledek smart watcheru nelze přečíst." >&2
-    exit_with_cleanup 2
-  }
-  mapfile -t WATCH_RESULT <<< "$watch_text"
-  WATCH_ACTION="${WATCH_RESULT[0]:-FULL_SHELL_RESTART}"
-  WATCH_COUNT="${WATCH_RESULT[1]:-0}"
+    if stop_recorded_watcher; then
+      :
+    else
+      rc=$?
+      echo "CHYBA: smart watcher process group nebyla bezpečně uklizena." >&2
+      exit_with_cleanup "$rc"
+    fi
 
-  echo
-  echo "Smart watch: $WATCH_ACTION ($WATCH_COUNT změn)"
-  for ((i = 2; i < ${#WATCH_RESULT[@]}; i++)); do
-    echo "  ${WATCH_RESULT[$i]}"
+    if [[ "$watcher_rc" -ne 0 ]]; then
+      echo "CHYBA: smart watcher skončil s kódem $watcher_rc." >&2
+      exit_with_cleanup "$watcher_rc"
+    fi
+
+    watch_text="$(read_watch_result "$WATCH_RESULT_FILE")" || {
+      echo "CHYBA: výsledek smart watcheru nelze přečíst." >&2
+      exit_with_cleanup 2
+    }
+    mapfile -t WATCH_RESULT <<< "$watch_text"
+    WATCH_ACTION="${WATCH_RESULT[0]:-FULL_SHELL_RESTART}"
+    WATCH_COUNT="${WATCH_RESULT[1]:-0}"
+
+    echo
+    echo "Smart watch: $WATCH_ACTION ($WATCH_COUNT změn)"
+    for ((i = 2; i < ${#WATCH_RESULT[@]}; i++)); do
+      echo "  ${WATCH_RESULT[$i]}"
+    done
+
+    if [[ "$WATCH_ACTION" == "IGNORE" ]]; then
+      echo "Pouze ignorované změny; Shell Preview běží dál."
+      continue
+    fi
+
+    echo "Fallback: restartuji Shell Preview..."
+    if stop_shell; then
+      :
+    else
+      rc=$?
+      exit_with_cleanup "$rc"
+    fi
+    sleep 0.5
+    break
   done
-
-  if [[ "$WATCH_ACTION" == "IGNORE" ]]; then
-    echo "Pouze ignorované změny; Shell Preview běží dál."
-    continue
-  fi
-
-  echo "Fallback: restartuji Shell Preview..."
-  if stop_shell; then
-    :
-  else
-    rc=$?
-    exit_with_cleanup "$rc"
-  fi
-  sleep 0.5
 done
