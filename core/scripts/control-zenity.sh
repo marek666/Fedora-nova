@@ -38,7 +38,6 @@ while true; do
     'Obnovit snapshot' 'Vybrat a obnovit dřívější stav' \
     'Export' 'Záloha včetně Forge profilů' \
     'Import' 'Načíst přenosnou zálohu' \
-    'Náhled' 'Otevřít lokální přehled profilů' \
     'Stav' 'Zobrazit aktivní nastavení' \
     'Diagnostika' 'Kontrola kompatibility a výkonu' \
     'Reload' 'Znovu načíst Shell theme' \
@@ -175,7 +174,6 @@ while true; do
         --file-filter='tar.gz | *.tar.gz' 2>/dev/null || true)"
       [[ -n "$file" ]] && "$SCRIPT_DIR/import-config.sh" "$file"
       ;;
-    Náhled) xdg-open "$NOVA_APP_DIR/preview/index.html" >/dev/null 2>&1 & ;;
     Stav)
       tmp="$(mktemp)"
       "$SCRIPT_DIR/status.sh" >"$tmp"

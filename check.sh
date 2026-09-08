@@ -20,6 +20,25 @@ else
   printf 'WARN: Sass compiler není dostupný; SCSS kontrola přeskočena.\n' >&2
 fi
 
+VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+
+grep -Fq "version: '$VERSION'" "$ROOT/meson.build" || {
+  echo "CHYBA: meson.build neodpovídá VERSION=$VERSION" >&2
+  exit 1
+}
+
+grep -Fq "VERSION = \"$VERSION\"" \
+  "$ROOT/app/src/fedora_nova/constants.py" || {
+  echo "CHYBA: app constants.py neodpovídá VERSION=$VERSION" >&2
+  exit 1
+}
+
+grep -Fq "NOVA_VERSION=\"$VERSION\"" \
+  "$ROOT/core/scripts/lib.sh" || {
+  echo "CHYBA: core/scripts/lib.sh neodpovídá VERSION=$VERSION" >&2
+  exit 1
+}
+
 python3 - "$ROOT" <<'PY'
 from pathlib import Path
 import json

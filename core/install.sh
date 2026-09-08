@@ -118,7 +118,6 @@ Forge:          fedora-nova forge Ultraviolet '#D630F2' '#2ED8E8'
 Přepnutí:       fedora-nova profile pulse --reload
 Rollback:        fedora-nova rollback
 Snapshot:        fedora-nova snapshot create pred-zmenou
-Náhled:         fedora-nova preview
 Diagnostika:    fedora-nova doctor
 Nouzový režim:  fedora-nova safe-mode
 

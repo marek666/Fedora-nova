@@ -21,7 +21,7 @@ install_data(
 )
 
 install_data(
-  'io.github.fedoranova.FedoraNova.Devel.circle.svg',
+  'io.github.fedoranova.FedoraNova.Devel.svg',
   install_dir: join_paths(
     get_option('datadir'),
     'icons',

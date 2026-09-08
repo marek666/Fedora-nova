@@ -3,7 +3,7 @@
 Name=Fedora Nova Settings (Devel)
 Comment=Responsive development settings for Fedora Nova
 Exec=fedora-nova-settings-devel
-Icon=io.github.fedoranova.FedoraNova.Devel.circle
+Icon=io.github.fedoranova.FedoraNova.Devel
 Terminal=false
 Type=Application
 Categories=Settings;DesktopSettings;GTK;

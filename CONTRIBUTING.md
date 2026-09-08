@@ -1,256 +1,211 @@
+# Contributing to Fedora Nova
 
-# Přispívání do Fedora Nova
+Fedora Nova is currently under active development. Changes should be small,
+reviewable, and tested before they are merged into the integration branch.
 
-## Vývoj UI
+## Repository structure
+
+```text
+app/        GTK4/libadwaita Settings application
+core/       Fedora Nova runtime, CLI, themes and desktop integrations
+docs/       project and development documentation
+.github/    CI configuration
+```
+
+Development entry points currently remain in the repository root.
+
+## Development setup
+
+Install the required Fedora development dependencies:
 
 ```bash
 ./dev-setup-fedora.sh
+```
+
+## Settings application
+
+Run the GTK4/libadwaita Settings application in safe preview mode:
+
+```bash
 ./dev-run.sh preview
 ```
 
-V GNOME Builderu otevři kořen projektu a spusť konfiguraci:
+Preview mode does not intentionally modify the current host GNOME session.
 
-- `io.github.fedoranova.FedoraNova.Devel.json` pro bezpečný Flatpak Preview,
-- `Native Host` pro skutečné změny Fedora Nova.
+Run against the host backend:
 
-## Responzivní testování
+```bash
+./dev-run.sh host
+```
 
-- zmenšuj okno pod 720 sp,
-- stiskni `Ctrl+Shift+M` pro Adaptive Preview,
-- zkontroluj šířky 360, 480, 720 a 1040 px,
-- ověř, že žádný `Adw.ActionRow` nepřetéká.
+Host mode can modify the active GNOME environment and should only be used
+when real system integration needs to be tested.
 
-## Kontroly
+Settings application sources live in:
+
+```text
+app/src/fedora_nova/
+```
+
+Important files include:
+
+```text
+app/src/fedora_nova/application.py
+app/src/fedora_nova/window.py
+app/src/fedora_nova/pages.py
+app/src/fedora_nova/backend.py
+app/src/fedora_nova/style.css
+```
+
+Application metadata, desktop integration and GSettings resources live in:
+
+```text
+app/data/
+```
+
+## GNOME Shell Preview
+
+Fedora Nova provides an isolated nested GNOME Shell using Mutter Development Kit.
+
+Run a preview:
+
+```bash
+./dev-shell-preview.sh tech
+```
+
+Run live watch mode:
+
+```bash
+./dev-shell-preview.sh --watch tech
+```
+
+Stop the preview:
+
+```bash
+./dev-shell-preview.sh --stop
+```
+
+The preview uses an isolated configuration and does not intentionally replace
+the currently logged-in GNOME Shell.
+
+## Shell themes
+
+Development Sass sources live in:
+
+```text
+core/themes-src/
+```
+
+Compiled runtime themes live in:
+
+```text
+core/themes/
+```
+
+Check Sass sources:
+
+```bash
+core/scripts/build-theme-sass.sh --check
+```
+
+Apply generated Sass output when intentionally updating compiled themes:
+
+```bash
+core/scripts/build-theme-sass.sh --apply
+```
+
+Do not manually edit generated theme output when the same section is owned by
+the Sass build pipeline.
+
+## Fedora Nova Core
+
+The development CLI entry point is:
+
+```bash
+core/nova --help
+```
+
+Runtime and host integration code lives primarily in:
+
+```text
+core/nova
+core/scripts/
+core/config/
+core/themes/
+core/terminal/
+```
+
+## Checks
+
+Before committing changes run:
 
 ```bash
 ./check.sh
 ```
-# Fedora Nova 0.7.2-dev — Builder + Real GNOME Shell Preview
 
-Tato vývojová verze odděluje dva různé preview režimy:
-
-## 1. Settings Preview
-
-GNOME Builder / Flatpak spouští naši GTK4/libadwaita Settings aplikaci.
-Je ideální pro:
-
-- responzivitu,
-- navigaci,
-- widgety,
-- dialogy,
-- stavové stránky.
-
-Sám o sobě ale neobsahuje GNOME Shell, takže v něm Shell theme není vidět.
-
-## 2. GNOME Shell Preview
-
-Fedora Nova 0.7.2 přidává skutečný nested GNOME Shell přes Mutter
-Development Kit:
+For Meson or packaging changes also run:
 
 ```bash
-fedora-nova-shell-preview tech
-fedora-nova-shell-preview --watch tech
-fedora-nova-shell-preview --stop
+rm -rf _build _staging
+meson setup _build
+meson compile -C _build
+DESTDIR="$PWD/_staging" meson install -C _build
 ```
 
-Otevře se **Mutter Development Kit** s vlastním GNOME Shellem v okně.
-Preview používá:
+## Responsive UI testing
 
-- vlastní izolovaný dconf,
-- vlastní `XDG_CONFIG_HOME`,
-- vlastní kopii Fedora Nova themes,
-- vybraný Nova wallpaper,
-- User Themes extension,
-- Dash to Dock, pokud je dostupný,
-- bundled Top Bar All Monitors,
-- Tela Circle ikony,
-- Continuous Squircle curve,
-- Circle Large hover,
-- Nova ikony koše z `core/assets/icons` v Tela Circle,
-- Nova GTK/libadwaita barvy v izolovaném preview configu,
-- vypnuté GNOME/Fedora uvítání uvnitř izolovaného Mutter profilu.
+For Settings application changes test at approximately:
 
-Normální přihlášené GNOME se tím nepřepíná.
+- 360 px
+- 480 px
+- 720 px
+- 1040 px
 
-Live režim `--watch` sleduje celou složku `core/`. Při změně zdrojů ukončí
-nested Shell, znovu vytvoří izolovaný preview root a spustí nové okno s
-aktuálním kódem.
-Současně běží vždy jen jedna live instance.
-
-## Instalace vývojových závislostí
-
-```bash
-./dev-setup-fedora.sh
-```
-
-Nově nainstaluje také:
-
-- `sassc`,
-- `inotify-tools`,
-- `mutter-devkit`,
-- `gnome-shell-extension-user-theme`,
-- `gnome-shell-extension-dash-to-dock`.
-
-A vytvoří:
+Adaptive Preview can be toggled with:
 
 ```text
-~/.local/bin/fedora-nova-shell-preview
+Ctrl+Shift+M
 ```
 
-## GNOME Builder
+Check that navigation remains usable and that Adwaita rows and controls do not
+overflow at narrow widths.
 
-V Builderu dál spusť aplikaci přes:
+## Branch workflow
+
+`main` contains stable releases.
+
+`development` is the integration branch for the next Fedora Nova release.
+
+Use dedicated branches for isolated work, for example:
 
 ```text
-io.github.fedoranova.FedoraNova.Devel.json
+feature/*
+fix/*
+cleanup/*
 ```
 
-Potom v aplikaci otevři:
+Avoid mixing large structural moves with unrelated runtime or concurrency
+changes in the same commit.
+
+## Commit scope
+
+Prefer commits that represent one understandable change.
+
+Examples:
 
 ```text
-Systém → GNOME Shell Preview
+cleanup: reorganize application sources
+docs: refresh Builder workflow
+fix(preview): repair native development launcher
+feat(terminal): add Ptyxis profile control
 ```
 
-Vyber profil a klikni:
+## Safety
 
-```text
-Spustit Shell Preview
-```
+Changes affecting host GNOME settings, extensions, themes or user configuration
+must provide a safe failure path where practical.
 
-I když Settings aplikace běží jako Flatpak Preview, nested Shell se spouští
-na hostiteli přes development bridge.
+Preview infrastructure should remain isolated from the normal host environment.
 
-## Ruční spuštění
-
-```bash
-./dev-shell-preview.sh tech
-./dev-shell-preview.sh --watch tech
-./dev-shell-preview.sh --stop
-./dev-shell-preview.sh pulse
-./dev-shell-preview.sh midnight
-```
-
-Preview zavřeš obyčejným zavřením okna Mutter Development Kit.
-
-## Kompletní systémové nastavení
-
-```bash
-fedora-nova preset full --reload
-```
-
-Zapne User Themes, Dash to Dock a Top Bar All Monitors, nastaví Continuous
-Squircle curve, Circle Large hover, Tela Circle + kruhové Steam ikony, Nova
-GTK/libadwaita barvy, session restore po přihlášení a vypne GNOME/Fedora
-welcome dialog.
-
-## Kde upravovat theme
-
-```text
-core/themes/Fedora-Nova-Tech/gnome-shell/gnome-shell.css
-```
-
-V live režimu se nested Shell po změně CSS restartuje automaticky.
-
-Opakovatelné GNOME Shell vrstvy se dají generovat ze Sass zdrojů:
-
-```bash
-core/scripts/build-theme-sass.sh --check
-core/scripts/build-theme-sass.sh --apply
-```
-
-Tailwind pro Shell theme nepoužíváme, protože GNOME Shell není webový DOM.
-Release artefaktem zůstává obyčejné CSS.
-
-## Kde upravovat Settings aplikaci
-
-```text
-src/fedora_nova/window.py
-src/fedora_nova/pages.py
-src/fedora_nova/style.css
-```
-
-# GNOME Builder — Fedora Nova 0.7.2-dev
-
-## Proč se pořád zobrazoval Flatpak Preview
-
-To nebyla chyba tvého přepnutí. Builder vidí Flatpak manifest a používá ho jako build/run konfiguraci. Náš původní `.buildconfig` s `runtime=host` nebyl v aktuálním workflow spolehlivý.
-
-Proto ho 0.7.2-dev už nepoužívá.
-
-## Doporučený workflow
-
-Spusť projekt normálně přes:
-
-```text
-io.github.fedoranova.FedoraNova.Devel.json
-```
-
-Po startu aplikace:
-
-- **Systém → System Host OFF** = bezpečný UI preview,
-- **Systém → System Host ON** = skutečné změny hostitelské Fedory.
-
-Builder tak může pořád využívat čisté GNOME 50 SDK a my nemusíme kvůli každému reálnému testu měnit build konfiguraci.
-
-## Host požadavek
-
-Na hostiteli musí fungovat:
-
-```bash
-fedora-nova status
-```
-
-Aplikace jej z Flatpaku spouští přes `flatpak-spawn --host`.
-
-## Responzivita
-
-`Ctrl+Shift+M` otevře Adaptive Preview. Testuj zejména 360, 480, 720 a 1040 px.
-
-
-# Skutečný GNOME Shell theme v testovacím okně
-
-Flatpak Preview testuje pouze Settings aplikaci. Pro theme používej
-Mutter Development Kit:
-
-```bash
-./dev-shell-preview.sh tech
-./dev-shell-preview.sh --watch tech
-./dev-shell-preview.sh --stop
-```
-
-nebo přímo v Settings:
-
-```text
-Systém → GNOME Shell Preview → Spustit Shell Preview
-Systém → GNOME Shell Preview → Spustit Live Preview
-Systém → GNOME Shell Preview → Zastavit Live Preview
-```
-
-GNOME 49+ používá:
-
-```bash
-dbus-run-session gnome-shell --devkit --wayland
-```
-
-Preview má oddělené XDG config/data/cache/state adresáře, takže jeho
-GSettings/dconf konfigurace nezasahuje do běžného sezení.
-
-Live Preview sleduje `core/themes`, `core/assets/wallpapers` a
-`core/config/profiles.json`. Při změně ukončí nested Shell a spustí nové
-izolované okno s aktuální kopií souborů.
-Současně běží jen jedna live instance; další kliknutí už nové okno neotevře.
-
-# Sass pro theme vrstvy
-
-Tailwind se pro GNOME Shell theme nepoužívá, protože Shell CSS není webový DOM.
-Sass je praktičtější: vygeneruje obyčejné CSS, které lze vydat bez runtime
-závislostí.
-
-```bash
-core/scripts/build-theme-sass.sh --check
-core/scripts/build-theme-sass.sh --generate
-core/scripts/build-theme-sass.sh --apply
-```
-
-`--apply` synchronizuje jen marker bloky `NOVA_CURVE` a `NOVA_HOVER` ve
-stávajících theme CSS souborech.
+Do not commit personal absolute paths, local Builder state, caches, generated
+bytecode or build directories.
