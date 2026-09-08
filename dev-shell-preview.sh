@@ -70,6 +70,8 @@ SESSION_PGID_FILE="$RUNTIME_DIR/session.pgid"
 SHELL_CHILD_PID_FILE="$RUNTIME_DIR/shell.pid"
 SESSION_META_FILE="$RUNTIME_DIR/session.env"
 TOKEN_FILE="$RUNTIME_DIR/preview.token"
+WATCH_RESULT_FILE="$RUNTIME_DIR/watch-result.json"
+PREVIEW_RELOAD_HELPER="$CORE/scripts/preview_reload.py"
 
 PREVIEW_XDG_DATA_DIRS=""
 SHELL_PID=""
@@ -137,8 +139,8 @@ Examples:
   ./dev-shell-preview.sh --stop
 
 The preview runs in an isolated HOME, XDG and D-Bus session. In --watch mode
-the nested GNOME Shell is restarted when anything under core/ changes.
-The host GNOME session is untouched.
+repository changes are debounced and classified before the current conservative
+full-restart fallback is applied. The host GNOME session is untouched.
 USAGE
 }
 
@@ -466,6 +468,10 @@ PROFILE_JSON="$CORE/config/profiles.json"
   echo "CHYBA: chybí $PROFILE_JSON" >&2
   exit 1
 }
+[[ -f "$PREVIEW_RELOAD_HELPER" ]] || {
+  echo "CHYBA: chybí $PREVIEW_RELOAD_HELPER" >&2
+  exit 1
+}
 
 USER_THEME_UUID="user-theme@gnome-shell-extensions.gcampax.github.com"
 DOCK_UUID="dash-to-dock@micxgx.gmail.com"
@@ -757,7 +763,7 @@ print_banner() {
   echo "Izolace:     $PREVIEW_ROOT"
   echo "Home:        izolovaný"
   if [[ $WATCH -eq 1 ]]; then
-    echo "Live:        zapnuto"
+    echo "Live:        smart watch (full-restart fallback)"
   fi
   if [[ "${NOVA_PREVIEW_A11Y:-0}" == "1" ]]; then
     echo "A11y bridge: zapnutý"
@@ -900,29 +906,46 @@ stop_shell() {
   fi
 }
 
-snapshot_state() {
-  find "$CORE" \
-    -type f -printf '%T@ %p\n' 2>/dev/null |
-    sort |
-    sha256sum
+read_watch_result() {
+  local result_file="$1"
+  python3 - "$result_file" <<'PYJSON'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"invalid smart-watch result: {exc}")
+
+allowed = {
+    "IGNORE",
+    "THEME_RELOAD",
+    "ASSET_REFRESH",
+    "CONFIG_REFRESH",
+    "FULL_SHELL_RESTART",
+}
+action = data.get("action")
+changes = data.get("changes")
+if action not in allowed or not isinstance(changes, list):
+    raise SystemExit("invalid smart-watch result schema")
+
+print(action)
+print(len(changes))
+for item in changes[:8]:
+    value = item.get("path", "") if isinstance(item, dict) else ""
+    print(json.dumps(value, ensure_ascii=False))
+PYJSON
 }
 
 start_watcher() {
-  if command -v inotifywait >/dev/null 2>&1; then
-    inotifywait -q -r \
-      -e close_write,create,delete,move \
-      "$CORE" >/dev/null &
-    WATCH_PID=$!
-    return
-  fi
-
-  (
-    previous="$(snapshot_state)"
-    while sleep 2; do
-      current="$(snapshot_state)"
-      [[ "$current" != "$previous" ]] && exit 0
-    done
-  ) &
+  rm -f "$WATCH_RESULT_FILE"
+  python3 "$PREVIEW_RELOAD_HELPER" watch-once \
+    --repo-root "$ROOT" \
+    --debounce-ms "${NOVA_PREVIEW_WATCH_DEBOUNCE_MS:-250}" \
+    --poll-ms "${NOVA_PREVIEW_WATCH_POLL_MS:-100}" \
+    --json >"$WATCH_RESULT_FILE" &
   WATCH_PID=$!
 }
 
@@ -1023,15 +1046,38 @@ while true; do
     fi
   fi
 
-  if kill -0 "$WATCH_PID" 2>/dev/null; then
-    kill "$WATCH_PID" 2>/dev/null || true
-    wait "$WATCH_PID" 2>/dev/null || true
+  watcher_rc=0
+  if wait "$WATCH_PID"; then
+    watcher_rc=0
+  else
+    watcher_rc=$?
+  fi
+  WATCH_PID=""
+  if [[ "$watcher_rc" -ne 0 ]]; then
+    echo "CHYBA: smart watcher skončil s kódem $watcher_rc." >&2
+    exit_with_cleanup "$watcher_rc"
   fi
 
-  wait "$WATCH_PID" 2>/dev/null || true
-  WATCH_PID=""
+  watch_text="$(read_watch_result "$WATCH_RESULT_FILE")" || {
+    echo "CHYBA: výsledek smart watcheru nelze přečíst." >&2
+    exit_with_cleanup 2
+  }
+  mapfile -t WATCH_RESULT <<< "$watch_text"
+  WATCH_ACTION="${WATCH_RESULT[0]:-FULL_SHELL_RESTART}"
+  WATCH_COUNT="${WATCH_RESULT[1]:-0}"
+
   echo
-  echo "Změna ve zdrojích, restartuji Shell Preview..."
+  echo "Smart watch: $WATCH_ACTION ($WATCH_COUNT změn)"
+  for ((i = 2; i < ${#WATCH_RESULT[@]}; i++)); do
+    echo "  ${WATCH_RESULT[$i]}"
+  done
+
+  if [[ "$WATCH_ACTION" == "IGNORE" ]]; then
+    echo "Pouze ignorované změny; Shell Preview běží dál."
+    continue
+  fi
+
+  echo "Fallback: restartuji Shell Preview..."
   if stop_shell; then
     :
   else

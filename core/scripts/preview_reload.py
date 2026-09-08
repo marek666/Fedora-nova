@@ -8,8 +8,10 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import sys
 import tempfile
+import time
 from typing import Iterable
 
 IGNORE = "IGNORE"
@@ -270,6 +272,111 @@ def sync_tree(source: Path, target: Path, stamp: Path) -> bool:
             shutil.rmtree(temp, ignore_errors=True)
 
 
+def _watch_signature(path: Path) -> tuple[object, ...]:
+    info = path.lstat()
+    mode = info.st_mode
+    if stat.S_ISLNK(mode):
+        return ("link", os.readlink(path), info.st_mtime_ns, info.st_ino)
+    if stat.S_ISREG(mode):
+        return ("file", info.st_mtime_ns, info.st_size, info.st_ino, mode)
+    return ("other", info.st_mtime_ns, info.st_size, info.st_ino, mode)
+
+
+def _scan_repo_state(repo_root: Path) -> dict[str, tuple[object, ...]]:
+    root = repo_root.resolve(strict=True)
+    if not root.is_dir():
+        raise ValueError(f"repo root is not a directory: {root}")
+
+    state: dict[str, tuple[object, ...]] = {}
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+        directory = Path(dirpath)
+        kept_dirs: list[str] = []
+
+        for name in dirnames:
+            entry = directory / name
+            rel = entry.relative_to(root).as_posix()
+            if _match(rel, IGNORE_GLOBS):
+                continue
+            if entry.is_symlink():
+                state[rel] = _watch_signature(entry)
+                continue
+            kept_dirs.append(name)
+        dirnames[:] = kept_dirs
+
+        for name in filenames:
+            entry = directory / name
+            rel = entry.relative_to(root).as_posix()
+            if _match(rel, IGNORE_GLOBS):
+                continue
+            try:
+                state[rel] = _watch_signature(entry)
+            except FileNotFoundError:
+                # Atomic-save races are observed on the next poll.
+                continue
+
+    return state
+
+
+def watch_once(
+    repo_root: Path,
+    debounce_seconds: float = 0.25,
+    poll_seconds: float = 0.10,
+) -> tuple[str, list[dict[str, str]]]:
+    if debounce_seconds <= 0:
+        raise ValueError("debounce must be greater than zero")
+    if poll_seconds <= 0:
+        raise ValueError("poll interval must be greater than zero")
+
+    root = repo_root.resolve(strict=True)
+    previous = _scan_repo_state(root)
+    pending: set[str] = set()
+    deadline: float | None = None
+
+    while True:
+        time.sleep(poll_seconds)
+        current = _scan_repo_state(root)
+        changed = {
+            path
+            for path in previous.keys() | current.keys()
+            if previous.get(path) != current.get(path)
+        }
+        previous = current
+
+        if changed:
+            pending.update(changed)
+            deadline = time.monotonic() + debounce_seconds
+            continue
+
+        if pending and deadline is not None and time.monotonic() >= deadline:
+            action, details = classify_paths(sorted(pending), root)
+            if action == IGNORE:
+                pending.clear()
+                deadline = None
+                continue
+            return action, details
+
+
+def _cmd_watch_once(args: argparse.Namespace) -> int:
+    try:
+        action, details = watch_once(
+            Path(args.repo_root),
+            debounce_seconds=args.debounce_ms / 1000.0,
+            poll_seconds=args.poll_ms / 1000.0,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"preview_reload.py: watch-once: {exc}", file=sys.stderr)
+        return 2
+
+    payload = {"action": action, "changes": details}
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False))
+    else:
+        print(action)
+        for item in details:
+            print(f"{item['action']}\t{item['path']}")
+    return 0
+
+
 def _cmd_classify(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root) if args.repo_root else None
     action, details = classify_paths(args.paths, repo_root)
@@ -311,6 +418,16 @@ def build_parser() -> argparse.ArgumentParser:
     classify.add_argument("--json", action="store_true")
     classify.add_argument("paths", nargs="+")
     classify.set_defaults(func=_cmd_classify)
+
+    watch_once_parser = sub.add_parser(
+    "watch-once",
+    help="wait for a debounced batch of repository changes and classify it",
+)
+    watch_once_parser.add_argument("--repo-root", required=True)
+    watch_once_parser.add_argument("--debounce-ms", type=int, default=250)
+    watch_once_parser.add_argument("--poll-ms", type=int, default=100)
+    watch_once_parser.add_argument("--json", action="store_true")
+    watch_once_parser.set_defaults(func=_cmd_watch_once)
 
     fingerprint = sub.add_parser("fingerprint", help="hash a file or directory tree")
     fingerprint.add_argument("path")
