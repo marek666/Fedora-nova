@@ -1106,7 +1106,12 @@ cleanup() {
     watcher_rc=$?
     echo "VAROVÁNÍ: smart watcher nebyl bezpečně uklizen; runtime metadata ponechávám." >&2
   fi
-  if is_pid "${WATCH_PID:-}"; then
+  # Only wait after we successfully took ownership of watcher cleanup.
+  # If token validation refused cleanup, waiting here deadlocks: the watcher is
+  # correctly waiting for this still-alive supervisor to disappear. Preserve
+  # diagnostics, finish independent Shell cleanup, then return non-zero so the
+  # supervisor exits and the watcher can self-terminate.
+  if [[ "$watcher_rc" -eq 0 ]] && is_pid "${WATCH_PID:-}"; then
     wait "$WATCH_PID" 2>/dev/null || true
   fi
   WATCH_PID=""

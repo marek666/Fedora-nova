@@ -33,6 +33,7 @@ RANK = {
 
 IGNORE_GLOBS = (
     "__pycache__",
+    "**/__pycache__",
     "__pycache__/**",
     "**/__pycache__/**",
     "*.pyc",
@@ -488,6 +489,10 @@ def _watch_once_inotify(
 
     root = repo_root.resolve(strict=True)
     _ensure_supervisor(supervisor_pid, supervisor_token)
+    # Recursive inotify startup may otherwise succeed while silently skipping
+    # a pre-existing unreadable subtree. Validate the same lexical tree that
+    # polling would scan before trusting recursive coverage.
+    _scan_repo_state(root)
     env = os.environ.copy()
     env["LC_ALL"] = "C"
     process = subprocess.Popen(
@@ -525,6 +530,11 @@ def _watch_once_inotify(
                     detail = stderr or f"inotifywait exited with status {process.returncode}"
                     raise RuntimeError(detail)
                 if pending and deadline is not None and time.monotonic() >= deadline:
+                    # Reconcile traversal before accepting a batch. This catches
+                    # newly-created unreadable subtrees that recursive inotify
+                    # could not add watches for, while preserving transient race
+                    # handling in the scanner.
+                    _scan_repo_state(root)
                     action, details = classify_paths(sorted(pending), root)
                     if action == IGNORE:
                         pending.clear()
