@@ -1,3 +1,5 @@
+# Fedora Nova 0.8.0 cleanup notes
+
 1. dokončit přesuny složek
         ↓
 2. opravit Meson cesty app/

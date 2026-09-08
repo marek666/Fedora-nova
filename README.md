@@ -1,73 +1,143 @@
-# Fedora Nova 0.6.4 — Dock Hover & Large Halo Fix
+# Fedora Nova
 
-Opravná verze pro Fedora 44 + GNOME Shell 50 a Dash to Dock 105.
+Fedora Nova is an experimental desktop appearance and control project for Fedora GNOME.
 
-## Co opravuje
+The project combines a GNOME Shell theme, configurable visual profiles, desktop integration, a GTK4/libadwaita Settings application, and an isolated nested GNOME Shell development preview.
 
-### Šedý hover v docku
+> Current development version: **0.8.0-dev**
+>
+> Fedora Nova is under active development. Host mode can modify the current GNOME session; use Preview mode for normal UI development.
 
-Dash to Dock kreslí vlastní šedý hover přímo na `.overview-icon`.
-Fedora Nova 0.6.4 přepisuje přesně tuto vrstvu s vyšší prioritou:
+## Project structure
 
-- dock už nemá používat šedý `remark` hover,
-- ikona dostane barevný kruh podle aktivního Nova profilu,
-- oprava zahrnuje běžné aplikace, focused aplikace i Show Applications,
-- background docku je znovu vynucený z barev aktivního profilu.
-
-### Větší hover
-
-Výchozí `circle` je nyní větší:
-
-- app grid: vnější halo 10 px,
-- dock: vnější halo 5 px,
-- žádný padding ani margin se při hoveru nemění,
-- ikona se proto nezmenšuje a neposkakuje,
-- vizuálně malé ikonky, například Soubory, dostanou výraznější plochu.
-
-Původní menší varianta zůstává jako:
-
-```bash
-fedora-nova hover circle-compact --reload
+```text
+app/        GTK4/libadwaita Fedora Nova Settings application
+core/       runtime, CLI, themes, profiles and desktop integrations
+docs/       design, Builder workflow, roadmap and development notes
+.github/    CI
 ```
 
-## Instalace / upgrade
+Development entry points remain in the repository root while the 0.8.0 preview infrastructure is being stabilized.
+
+## Development
+
+Install the Fedora development dependencies:
 
 ```bash
-cd "$(xdg-user-dir DOWNLOAD)"
-unzip -o fedora-nova-0.6.4.zip
-cd fedora-nova-0.6.4
-./install.sh
+./dev-setup-fedora.sh
 ```
 
-Kompletní persistentní setup lze kdykoliv obnovit jedním příkazem:
+Run the Settings application in safe preview mode:
 
 ```bash
-fedora-nova preset full --reload
+./dev-run.sh preview
 ```
 
-Ten zapne User Themes, Dash to Dock, Top Bar All Monitors, Continuous
-Squircle, Circle Large hover, Tela Circle + kruhové Steam ikony a Nova barvy
-v GTK/libadwaita aplikacích. Zároveň vypne GNOME/Fedora welcome dialog.
-
-Potom aplikuj nový hover explicitně:
+Run the Settings application against the host backend:
 
 ```bash
-fedora-nova hover none --reload
-fedora-nova hover circle --reload
+./dev-run.sh host
 ```
 
-Nejjistější je následný relogin.
-
-## Hover režimy
+Run an isolated nested GNOME Shell:
 
 ```bash
-fedora-nova hover circle --reload
-fedora-nova hover circle-compact --reload
-fedora-nova hover tile --reload
-fedora-nova hover none --reload
-fedora-nova hover previous --reload
+./dev-shell-preview.sh tech
+./dev-shell-preview.sh --watch tech
+./dev-shell-preview.sh --stop
 ```
 
-## Folder dialog
+## Checks
 
-Velký SVG superellipse dialog složky z 0.6.2/0.6.3 zůstává beze změny.
+```bash
+./check.sh
+```
+
+The check script validates Bash, Python, Sass, JSON, and XML sources.
+
+## Fedora Nova Core
+
+The runtime lives in:
+
+```text
+core/
+```
+
+The CLI entry point is:
+
+```bash
+core/nova --help
+```
+
+Fedora Nova currently provides profiles, dock settings, motion presets, corner curves, hover styles, GTK integration, icon themes, Steam icon handling, multi-monitor panel support, snapshots, configuration import/export, and diagnostics.
+
+## Themes
+
+Built-in Shell themes:
+
+- Fedora Nova Tech
+- Fedora Nova Clean
+- Fedora Nova Midnight
+- Fedora Nova Glass Lite
+- Fedora Nova Pulse
+
+Development Sass sources live in:
+
+```text
+core/themes-src/
+```
+
+Compiled runtime themes live in:
+
+```text
+core/themes/
+```
+
+## Settings application
+
+The Settings application lives in:
+
+```text
+app/src/fedora_nova/
+```
+
+Application metadata and GSettings resources live in:
+
+```text
+app/data/
+```
+
+It is built with GTK4 and libadwaita.
+
+## GNOME Builder
+
+See:
+
+```text
+docs/BUILDER.md
+```
+
+The Builder workflow is currently being cleaned up for Fedora Nova 0.8.0.
+
+## Documentation
+
+- `CHANGELOG.md`
+- `docs/BUILDER.md`
+- `docs/DESIGN.md`
+- `docs/GTK.md`
+- `docs/ROADMAP.md`
+- `docs/SOURCES.md`
+
+## Branches
+
+`main` contains stable releases.
+
+`development` is the integration branch for the next release.
+
+Feature and cleanup work is developed on dedicated branches before being merged into `development`.
+
+## License
+
+Fedora Nova is licensed under GPL-3.0-or-later.
+
+See `LICENSE`.

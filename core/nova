@@ -36,7 +36,6 @@ Usage: fedora-nova COMMAND [ARGS]
   status                               aktivní stav
   doctor                               diagnostika
   reload                               reload User Themes extension
-  preview                              lokální přehled
   safe-mode                            vypne Nova theme a dock
   restore [BACKUP]                     obnoví standardní zálohu
   version                              verze
@@ -83,7 +82,6 @@ case "$cmd" in
   status) "$ROOT/scripts/status.sh" ;;
   doctor) "$ROOT/scripts/doctor.sh" ;;
   reload) "$ROOT/scripts/reload-theme.sh" ;;
-  preview) xdg-open "$ROOT/preview/index.html" >/dev/null 2>&1 & ;;
   safe-mode) "$ROOT/scripts/nova-safe-mode.sh" ;;
   restore) "$ROOT/scripts/restore-settings.sh" "${1:-}" ;;
   version|--version|-V) printf '%s %s\n' "$NOVA_NAME" "$NOVA_VERSION" ;;

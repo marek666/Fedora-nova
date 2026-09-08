@@ -19,8 +19,7 @@ datadir = get_option('datadir')
 pkgdatadir = join_paths(prefix, datadir, 'fedora-nova')
 app_id = 'io.github.fedoranova.FedoraNova.Devel'
 
-subdir('app/src')
-subdir('app/data')
+subdir('app')
 
 install_subdir(
   'core',

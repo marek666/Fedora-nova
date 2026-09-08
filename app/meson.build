@@ -3,6 +3,9 @@ launcher_conf = configuration_data()
 launcher_conf.set('PYTHON', python.full_path())
 launcher_conf.set('PKGDATADIR', pkgdatadir)
 
+subdir('src')
+subdir('data')
+
 configure_file(
   input: 'fedora-nova-settings-devel.in',
   output: 'fedora-nova-settings-devel',

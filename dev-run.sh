@@ -18,13 +18,13 @@ case "$MODE" in
     ;;
 esac
 
-export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$ROOT/app/src${PYTHONPATH:+:$PYTHONPATH}"
 export FEDORA_NOVA_PROJECT_ROOT="$ROOT"
 export FEDORA_NOVA_CORE="$ROOT/core"
 
 SCHEMA_DIR="$ROOT/.dev-build/schemas"
 mkdir -p "$SCHEMA_DIR"
-cp "$ROOT/data/io.github.fedoranova.FedoraNova.Devel.gschema.xml" "$SCHEMA_DIR/"
+cp "$ROOT/app/data/io.github.fedoranova.FedoraNova.Devel.gschema.xml" "$SCHEMA_DIR/"
 if command -v glib-compile-schemas >/dev/null 2>&1; then
   glib-compile-schemas "$SCHEMA_DIR"
   export GSETTINGS_SCHEMA_DIR="$SCHEMA_DIR"

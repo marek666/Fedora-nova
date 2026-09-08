@@ -2,7 +2,7 @@
 set -o pipefail
 
 NOVA_NAME="Fedora Nova"
-NOVA_VERSION="0.6.4"
+NOVA_VERSION="0.8.0-dev"
 NOVA_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 NOVA_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 NOVA_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"

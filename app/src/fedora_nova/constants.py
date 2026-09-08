@@ -5,7 +5,7 @@ from pathlib import Path
 
 APP_ID = "io.github.fedoranova.FedoraNova.Devel"
 APP_NAME = "Fedora Nova Settings"
-VERSION = "0.7.2-dev"
+VERSION = "0.8.0-dev"
 PROJECT_URL = "https://github.com/fedoranova/FedoraNova"
 ISSUE_URL = f"{PROJECT_URL}/issues"
 

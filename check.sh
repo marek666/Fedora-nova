@@ -11,7 +11,7 @@ find "$ROOT" \
 mkdir -p "$ROOT/.dev-build/pycache"
 PYTHONPYCACHEPREFIX="$ROOT/.dev-build/pycache" \
 python3 -m compileall -q \
-  "$ROOT/src/fedora_nova" \
+  "$ROOT/app/src/fedora_nova" \
   "$ROOT/core/scripts"
 
 if command -v sassc >/dev/null 2>&1 || command -v sass >/dev/null 2>&1; then
