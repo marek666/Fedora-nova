@@ -330,9 +330,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--preview-data", required=True, type=Path)
     parser.add_argument("--preview-state", required=True, type=Path)
     parser.add_argument("--shell-pid", required=True, type=int)
-    parser.add_argument("--token", required=True)
     args = parser.parse_args(argv)
 
+    token = os.environ.get("NOVA_PREVIEW_TOKEN", "")
     staging_root: Path | None = None
     try:
         repo_root = require_dir(args.repo_root, "repo root")
@@ -342,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
         preview_data = require_dir(args.preview_data, "preview data")
         preview_state = require_dir(args.preview_state, "preview state")
 
-        shell_env = validate_shell(args.shell_pid, args.token)
+        shell_env = validate_shell(args.shell_pid, token)
         staging_root, staged_theme = build_staged_theme(
             repo_root,
             core,
@@ -351,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
             preview_config,
             preview_state,
         )
-        validate_shell(args.shell_pid, args.token)
+        validate_shell(args.shell_pid, token)
 
         env = nested_gsettings_env(
             shell_env,
@@ -367,7 +367,7 @@ def main(argv: list[str] | None = None) -> int:
             env=env,
             expected_theme=args.theme,
             shell_pid=args.shell_pid,
-            token=args.token,
+            token=token,
         )
         print(f"Theme hot reload applied: {args.theme}")
         return 0
