@@ -85,6 +85,8 @@ CONFIG_GLOBS = (
 )
 
 FULL_GLOBS = (
+    # Also imported by the watcher for cancellation and subprocess ownership.
+    "core/scripts/theme_hot_reload.py",
     "dev-shell-preview.sh",
     "dev-setup-fedora.sh",
     "core/third-party/topbar-all-monitors/**",
@@ -402,51 +404,143 @@ def _ensure_supervisor(supervisor_pid: int | None, token: str | None) -> None:
         raise SupervisorGone("preview supervisor is no longer running")
 
 
-def _watch_once_polling(
-    repo_root: Path,
-    debounce_seconds: float,
-    poll_seconds: float,
-    supervisor_pid: int | None,
-    supervisor_token: str | None,
-) -> tuple[str, list[dict[str, str]]]:
-    root = repo_root.resolve(strict=True)
-    _ensure_supervisor(supervisor_pid, supervisor_token)
-    previous = _scan_repo_state(root)
-    pending: set[str] = set()
-    deadline: float | None = None
-    next_scan = time.monotonic() + poll_seconds
+class Collector:
+    """One collector and one trusted baseline for the entire watcher lifetime."""
 
-    while True:
-        now = time.monotonic()
-        sleep_for = min(_PARENT_CHECK_SECONDS, max(0.0, next_scan - now))
-        if sleep_for > 0:
-            time.sleep(sleep_for)
-        _ensure_supervisor(supervisor_pid, supervisor_token)
+    def __init__(self, repo_root, debounce_seconds, poll_seconds, collector,
+                 supervisor_pid=None, supervisor_token=None):
+        self.root = repo_root.resolve(strict=True)
+        if debounce_seconds <= 0 or poll_seconds <= 0:
+            raise ValueError("debounce and poll interval must be greater than zero")
+        if collector not in {"auto", "poll", "inotify"}:
+            raise ValueError(f"unknown collector: {collector}")
+        self.kind = ("inotify" if shutil.which("inotifywait") else "poll") if collector == "auto" else collector
+        self.supervisor_pid, self.token = supervisor_pid, supervisor_token
+        self.debounce, self.interval = debounce_seconds, poll_seconds
+        self.pending: set[str] = set()
+        self.deadline = None
+        self.process = None
+        self.selector = selectors.DefaultSelector()
+        self.buffer = b""
+        self.errors = b""
+        self.ready = self.kind == "poll"
+        self.started = time.monotonic()
+        self.next_scan = self.started + poll_seconds
+        try:
+            _ensure_supervisor(supervisor_pid, supervisor_token)
+            self.previous = _scan_repo_state(self.root)
+            if self.kind == "inotify":
+                binary = shutil.which("inotifywait")
+                if binary is None:
+                    raise RuntimeError("inotifywait is not available")
+                command = _inotify_command(binary, self.root)
+                command.remove("--quiet")
+                command[command.index("%w%f%0")] = "%e%0%w%f%0"
+                env = os.environ.copy()
+                env["LC_ALL"] = "C"
+                self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+                self.selector.register(self.process.stdout, selectors.EVENT_READ, "events")
+                self.selector.register(self.process.stderr, selectors.EVENT_READ, "errors")
+        except BaseException:
+            self.close()
+            raise
 
-        now = time.monotonic()
-        if now < next_scan:
-            continue
-        current = _scan_repo_state(root)
-        next_scan = now + poll_seconds
-        changed = {
-            path
-            for path in previous.keys() | current.keys()
-            if previous.get(path) != current.get(path)
-        }
-        previous = current
+    def __enter__(self):
+        return self
 
-        if changed:
-            pending.update(changed)
-            deadline = time.monotonic() + debounce_seconds
-            continue
+    def __exit__(self, *_exc):
+        self.close()
 
-        if pending and deadline is not None and time.monotonic() >= deadline:
-            action, details = classify_paths(sorted(pending), root)
-            if action == IGNORE:
-                pending.clear()
-                deadline = None
+    def close(self):
+        self.selector.close()
+        if self.process is not None:
+            if self.process.poll() is None:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait()
+            self.process.stdout.close()
+            self.process.stderr.close()
+
+    def add(self, paths):
+        paths = {path for path in paths if path and not _match(path, IGNORE_GLOBS)}
+        if paths:
+            self.pending.update(paths)
+            self.deadline = time.monotonic() + self.debounce
+
+    def reconcile(self):
+        # This baseline is never replaced without first accounting for its diff.
+        current = _scan_repo_state(self.root)
+        self.add(_repo_state_changes(self.previous, current))
+        self.previous = current
+        self.next_scan = time.monotonic() + self.interval
+
+    def pump(self, timeout=0.0):
+        if self.supervisor_pid is not None:
+            import theme_hot_reload as hot
+            hot.checkpoint()
+        _ensure_supervisor(self.supervisor_pid, self.token)
+        if self.kind == "poll":
+            if timeout:
+                time.sleep(min(timeout, max(0, self.next_scan - time.monotonic())))
+            if time.monotonic() >= self.next_scan:
+                self.reconcile()
+        else:
+            for key, _mask in self.selector.select(timeout):
+                chunk = os.read(key.fileobj.fileno(), 65536)
+                if not chunk:
+                    raise RuntimeError("inotify collector closed unexpectedly")
+                if key.data == "errors":
+                    self.errors += chunk
+                    if len(self.errors) > 65536:
+                        raise RuntimeError("excessive inotify diagnostics")
+                    if b"Watches established." in self.errors and not self.ready:
+                        self.ready = True
+                        # Capture creations between the initial scan and kernel
+                        # watch registration, using the *original* baseline.
+                        self.reconcile()
+                    continue
+                self.buffer += chunk
+                while self.buffer.count(b"\0") >= 2:
+                    event, raw, self.buffer = self.buffer.split(b"\0", 2)
+                    if b"Q_OVERFLOW" in event or b"UNMOUNT" in event:
+                        raise RuntimeError("inotify coverage was lost")
+                    path = _lexical_absolute(Path(os.fsdecode(raw)))
+                    try:
+                        relative = path.relative_to(self.root).as_posix()
+                    except ValueError:
+                        continue
+                    self.add({relative})
+            if self.process.poll() is not None:
+                raise RuntimeError(f"inotify exited: {self.errors.decode(errors='replace').strip()}")
+            if not self.ready and time.monotonic() - self.started > 10:
+                raise RuntimeError("inotify registration timed out")
+        _ensure_supervisor(self.supervisor_pid, self.token)
+
+    def next_batch(self):
+        while True:
+            self.pump(min(_PARENT_CHECK_SECONDS, self.interval))
+            if not self.ready or not self.pending or time.monotonic() < self.deadline:
                 continue
-            return action, details
+            self.reconcile()
+            if time.monotonic() < self.deadline:
+                continue
+            result = classify_paths(sorted(self.pending), self.root)
+            self.pending.clear()
+            self.deadline = None
+            return result
+
+
+def _watch_once_polling(repo_root, debounce_seconds, poll_seconds, supervisor_pid, supervisor_token):
+    with Collector(repo_root, debounce_seconds, poll_seconds, "poll", supervisor_pid, supervisor_token) as collector:
+        return collector.next_batch()
+
+
+def _watch_once_inotify(repo_root, debounce_seconds, supervisor_pid, supervisor_token):
+    with Collector(repo_root, debounce_seconds, 0.5, "inotify", supervisor_pid, supervisor_token) as collector:
+        return collector.next_batch()
 
 
 def _inotify_command(binary: str, root: Path) -> list[str]:
@@ -477,103 +571,6 @@ def _inotify_command(binary: str, root: Path) -> list[str]:
     ]
 
 
-def _watch_once_inotify(
-    repo_root: Path,
-    debounce_seconds: float,
-    supervisor_pid: int | None,
-    supervisor_token: str | None,
-) -> tuple[str, list[dict[str, str]]]:
-    binary = shutil.which("inotifywait")
-    if binary is None:
-        raise RuntimeError("inotifywait is not available")
-
-    root = repo_root.resolve(strict=True)
-    _ensure_supervisor(supervisor_pid, supervisor_token)
-    # Recursive inotify startup may otherwise succeed while silently skipping
-    # a pre-existing unreadable subtree. Validate the same lexical tree that
-    # polling would scan before trusting recursive coverage.
-    _scan_repo_state(root)
-    env = os.environ.copy()
-    env["LC_ALL"] = "C"
-    process = subprocess.Popen(
-        _inotify_command(binary, root),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=env,
-        start_new_session=False,
-    )
-    if process.stdout is None or process.stderr is None:
-        process.kill()
-        process.wait()
-        raise RuntimeError("failed to capture inotifywait output")
-
-    selector = selectors.DefaultSelector()
-    selector.register(process.stdout, selectors.EVENT_READ)
-    buffer = b""
-    pending: set[str] = set()
-    deadline: float | None = None
-
-    try:
-        while True:
-            _ensure_supervisor(supervisor_pid, supervisor_token)
-            now = time.monotonic()
-            timeout = _PARENT_CHECK_SECONDS
-            if deadline is not None:
-                timeout = min(timeout, max(0.0, deadline - now))
-
-            ready = selector.select(timeout)
-            _ensure_supervisor(supervisor_pid, supervisor_token)
-
-            if not ready:
-                if process.poll() is not None:
-                    stderr = process.stderr.read().decode("utf-8", errors="replace").strip()
-                    detail = stderr or f"inotifywait exited with status {process.returncode}"
-                    raise RuntimeError(detail)
-                if pending and deadline is not None and time.monotonic() >= deadline:
-                    # Reconcile traversal before accepting a batch. This catches
-                    # newly-created unreadable subtrees that recursive inotify
-                    # could not add watches for, while preserving transient race
-                    # handling in the scanner.
-                    _scan_repo_state(root)
-                    action, details = classify_paths(sorted(pending), root)
-                    if action == IGNORE:
-                        pending.clear()
-                        deadline = None
-                        continue
-                    return action, details
-                continue
-
-            chunk = os.read(process.stdout.fileno(), 65536)
-            if not chunk:
-                if process.poll() is None:
-                    continue
-                stderr = process.stderr.read().decode("utf-8", errors="replace").strip()
-                detail = stderr or f"inotifywait exited with status {process.returncode}"
-                raise RuntimeError(detail)
-            buffer += chunk
-
-            while b"\0" in buffer:
-                raw_path, buffer = buffer.split(b"\0", 1)
-                if not raw_path:
-                    continue
-                event_path = _lexical_absolute(Path(os.fsdecode(raw_path)))
-                try:
-                    rel = event_path.relative_to(root).as_posix()
-                except ValueError:
-                    continue
-                if not rel or _match(rel, IGNORE_GLOBS):
-                    continue
-                pending.add(rel)
-                deadline = time.monotonic() + debounce_seconds
-    finally:
-        selector.close()
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=1.0)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
 
 
 def watch_once(
@@ -615,22 +612,101 @@ def watch_once(
     )
 
 
+def _required_env(name: str) -> str:
+    value = os.environ.get(name, "")
+    if not value:
+        raise RuntimeError(f"required preview environment is missing: {name}")
+    return value
+
+
+def _read_positive_pid(path: Path) -> int:
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+        pid = int(text)
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"cannot read nested Shell PID from {path}: {exc}") from exc
+    if pid <= 0:
+        raise RuntimeError(f"invalid nested Shell PID in {path}")
+    return pid
+
+
+def _repo_state_changes(
+    before: dict[str, tuple[object, ...]],
+    after: dict[str, tuple[object, ...]],
+) -> set[str]:
+    return {
+        path
+        for path in before.keys() | after.keys()
+        if before.get(path) != after.get(path)
+    }
+
+
+def _run_theme_hot_reload(repo_root: Path, token: str, check_alive=None) -> str:
+    import theme_hot_reload as hot
+
+    if not _valid_preview_token(token):
+        raise RuntimeError("preview token is missing or invalid")
+    shell_pid = _read_positive_pid(Path(_required_env("NOVA_PREVIEW_SHELL_PID_FILE")))
+    theme = _required_env("NOVA_PREVIEW_THEME")
+    config = Path(_required_env("XDG_CONFIG_HOME"))
+    profile = (config / "fedora-nova/current-profile").read_text().strip()
+    command = [sys.executable, str(repo_root / "core/scripts/theme_hot_reload.py"),
+               "--repo-root", str(repo_root), "--profile", profile, "--theme", theme,
+               "--preview-home", _required_env("HOME"), "--preview-config", str(config),
+               "--preview-data", _required_env("XDG_DATA_HOME"),
+               "--preview-state", _required_env("XDG_STATE_HOME"), "--shell-pid", str(shell_pid)]
+    hot.run_checked(command, env=os.environ.copy(), timeout=45, check_alive=check_alive, cancel_grace=1.8)
+    return theme
+
+
+def _print_hot_reload_success(details: list[dict[str, str]], theme: str) -> None:
+    print(f"Theme refresh requested: {theme}; setting and Shell identity verified, CSS application unacknowledged.", file=sys.stderr)
+
+
 def _cmd_watch_once(args: argparse.Namespace) -> int:
     token = os.environ.get("NOVA_PREVIEW_TOKEN") if args.supervisor_pid else None
+    root = Path(args.repo_root)
     try:
-        action, details = watch_once(
-            Path(args.repo_root),
-            debounce_seconds=args.debounce_ms / 1000.0,
-            poll_seconds=args.poll_ms / 1000.0,
-            collector=args.collector,
-            supervisor_pid=args.supervisor_pid,
-            supervisor_token=token,
-        )
+        if args.supervisor_pid is None:
+            action, details = watch_once(root, args.debounce_ms / 1000, args.poll_ms / 1000, args.collector)
+        else:
+            import theme_hot_reload as hot
+
+            hot.enable_subreaper()
+            with hot.cancellation_signals(), Collector(root, args.debounce_ms / 1000, args.poll_ms / 1000,
+                                                      args.collector, args.supervisor_pid, token) as collector:
+                attempted_reload = False
+                details = []
+                while True:
+                    try:
+                        hot.checkpoint()
+                        action, details = collector.next_batch()
+                        if action != THEME_RELOAD:
+                            break
+                        attempted_reload = True
+                        collector.reconcile()
+                        collector.pump()
+                        if not collector.pending:
+                            theme = _run_theme_hot_reload(root, token, check_alive=collector.pump)
+                            collector.reconcile()
+                            collector.pump()
+                        if collector.pending:
+                            combined = {item["path"] for item in details} | collector.pending
+                            _, details = classify_paths(sorted(combined), root)
+                            action = FULL_SHELL_RESTART
+                            break
+                        _print_hot_reload_success(details, theme)
+                    except (SupervisorGone, hot.Cancelled):
+                        raise
+                    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
+                        if not attempted_reload:
+                            raise
+                        print(f"Theme refresh rejected; requesting full restart: {exc}", file=sys.stderr)
+                        action = FULL_SHELL_RESTART
+                        break
     except SupervisorGone:
-        # The supervisor owns this process. If it disappears abruptly there is
-        # nobody left to consume a result, so exit quietly after child cleanup.
         return 0
-    except (OSError, RuntimeError, ValueError) as exc:
+    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
         print(f"preview_reload.py: watch-once: {exc}", file=sys.stderr)
         return 2
 
@@ -642,6 +718,10 @@ def _cmd_watch_once(args: argparse.Namespace) -> int:
         for item in details:
             print(f"{item['action']}\t{item['path']}")
     return 0
+
+
+
+
 
 
 def _cmd_classify(args: argparse.Namespace) -> int:
@@ -666,7 +746,7 @@ def _cmd_sync(args: argparse.Namespace) -> int:
             Path(args.target),
             Path(args.stamp),
         )
-    except (OSError, RuntimeError, ValueError) as exc:
+    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
         print(f"preview_reload.py: sync: {exc}", file=sys.stderr)
         return 2
 

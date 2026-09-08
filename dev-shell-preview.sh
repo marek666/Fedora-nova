@@ -92,7 +92,7 @@ is_bootstrap_fd() {
 close_bootstrap_fd() {
   local fd="${1:-}"
   is_bootstrap_fd "$fd" || return 0
-  exec {fd}<&- 2>/dev/null || true
+  { exec {fd}<&-; } 2>/dev/null || true
 }
 
 bootstrap_proof_valid() {
@@ -761,6 +761,9 @@ PY
 }
 
 prepare_preview_root() {
+  python3 "$CORE/scripts/theme_hot_reload.py" --archive-recovery \
+    --preview-data "$PREVIEW_DATA" --preview-state "$PREVIEW_STATE" \
+    --runtime-dir "$RUNTIME_DIR" || return $?
   rm -rf "$PREVIEW_CONFIG" "$PREVIEW_DATA" "$PREVIEW_CACHE" "$PREVIEW_STATE"
   mkdir -p \
     "$PREVIEW_HOME" \
@@ -960,7 +963,7 @@ record_session_metadata() {
 
 start_shell() {
   load_profile
-  prepare_preview_root
+  prepare_preview_root || return $?
   export_preview_env
   print_banner
 
