@@ -1,7 +1,7 @@
 
 project(
   'fedora-nova',
-  version: '0.7.2-dev',
+  version: '0.8.0-dev',
   meson_version: '>= 1.2.0',
   default_options: [
     'warning_level=2',
@@ -19,8 +19,8 @@ datadir = get_option('datadir')
 pkgdatadir = join_paths(prefix, datadir, 'fedora-nova')
 app_id = 'io.github.fedoranova.FedoraNova.Devel'
 
-subdir('src')
-subdir('data')
+subdir('app/src')
+subdir('app/data')
 
 install_subdir(
   'core',

@@ -1,143 +1,73 @@
-# Fedora Nova 0.7.2-dev — Builder + Real GNOME Shell Preview
+# Fedora Nova 0.6.4 — Dock Hover & Large Halo Fix
 
-Tato vývojová verze odděluje dva různé preview režimy:
+Opravná verze pro Fedora 44 + GNOME Shell 50 a Dash to Dock 105.
 
-## 1. Settings Preview
+## Co opravuje
 
-GNOME Builder / Flatpak spouští naši GTK4/libadwaita Settings aplikaci.
-Je ideální pro:
+### Šedý hover v docku
 
-- responzivitu,
-- navigaci,
-- widgety,
-- dialogy,
-- stavové stránky.
+Dash to Dock kreslí vlastní šedý hover přímo na `.overview-icon`.
+Fedora Nova 0.6.4 přepisuje přesně tuto vrstvu s vyšší prioritou:
 
-Sám o sobě ale neobsahuje GNOME Shell, takže v něm Shell theme není vidět.
+- dock už nemá používat šedý `remark` hover,
+- ikona dostane barevný kruh podle aktivního Nova profilu,
+- oprava zahrnuje běžné aplikace, focused aplikace i Show Applications,
+- background docku je znovu vynucený z barev aktivního profilu.
 
-## 2. GNOME Shell Preview
+### Větší hover
 
-Fedora Nova 0.7.2 přidává skutečný nested GNOME Shell přes Mutter
-Development Kit:
+Výchozí `circle` je nyní větší:
 
-```bash
-fedora-nova-shell-preview tech
-fedora-nova-shell-preview --watch tech
-fedora-nova-shell-preview --stop
-```
+- app grid: vnější halo 10 px,
+- dock: vnější halo 5 px,
+- žádný padding ani margin se při hoveru nemění,
+- ikona se proto nezmenšuje a neposkakuje,
+- vizuálně malé ikonky, například Soubory, dostanou výraznější plochu.
 
-Otevře se **Mutter Development Kit** s vlastním GNOME Shellem v okně.
-Preview používá:
-
-- vlastní izolovaný dconf,
-- vlastní `XDG_CONFIG_HOME`,
-- vlastní kopii Fedora Nova themes,
-- vybraný Nova wallpaper,
-- User Themes extension,
-- Dash to Dock, pokud je dostupný,
-- bundled Top Bar All Monitors,
-- Tela Circle ikony,
-- Continuous Squircle curve,
-- Circle Large hover,
-- Nova ikony koše z `core/assets/icons` v Tela Circle,
-- Nova GTK/libadwaita barvy v izolovaném preview configu,
-- vypnuté GNOME/Fedora uvítání uvnitř izolovaného Mutter profilu.
-
-Normální přihlášené GNOME se tím nepřepíná.
-
-Live režim `--watch` sleduje celou složku `core/`. Při změně zdrojů ukončí
-nested Shell, znovu vytvoří izolovaný preview root a spustí nové okno s
-aktuálním kódem.
-Současně běží vždy jen jedna live instance.
-
-## Instalace vývojových závislostí
+Původní menší varianta zůstává jako:
 
 ```bash
-./dev-setup-fedora.sh
+fedora-nova hover circle-compact --reload
 ```
 
-Nově nainstaluje také:
-
-- `sassc`,
-- `inotify-tools`,
-- `mutter-devkit`,
-- `gnome-shell-extension-user-theme`,
-- `gnome-shell-extension-dash-to-dock`.
-
-A vytvoří:
-
-```text
-~/.local/bin/fedora-nova-shell-preview
-```
-
-## GNOME Builder
-
-V Builderu dál spusť aplikaci přes:
-
-```text
-io.github.fedoranova.FedoraNova.Devel.json
-```
-
-Potom v aplikaci otevři:
-
-```text
-Systém → GNOME Shell Preview
-```
-
-Vyber profil a klikni:
-
-```text
-Spustit Shell Preview
-```
-
-I když Settings aplikace běží jako Flatpak Preview, nested Shell se spouští
-na hostiteli přes development bridge.
-
-## Ruční spuštění
+## Instalace / upgrade
 
 ```bash
-./dev-shell-preview.sh tech
-./dev-shell-preview.sh --watch tech
-./dev-shell-preview.sh --stop
-./dev-shell-preview.sh pulse
-./dev-shell-preview.sh midnight
+cd "$(xdg-user-dir DOWNLOAD)"
+unzip -o fedora-nova-0.6.4.zip
+cd fedora-nova-0.6.4
+./install.sh
 ```
 
-Preview zavřeš obyčejným zavřením okna Mutter Development Kit.
-
-## Kompletní systémové nastavení
+Kompletní persistentní setup lze kdykoliv obnovit jedním příkazem:
 
 ```bash
 fedora-nova preset full --reload
 ```
 
-Zapne User Themes, Dash to Dock a Top Bar All Monitors, nastaví Continuous
-Squircle curve, Circle Large hover, Tela Circle + kruhové Steam ikony, Nova
-GTK/libadwaita barvy, session restore po přihlášení a vypne GNOME/Fedora
-welcome dialog.
+Ten zapne User Themes, Dash to Dock, Top Bar All Monitors, Continuous
+Squircle, Circle Large hover, Tela Circle + kruhové Steam ikony a Nova barvy
+v GTK/libadwaita aplikacích. Zároveň vypne GNOME/Fedora welcome dialog.
 
-## Kde upravovat theme
-
-```text
-core/themes/Fedora-Nova-Tech/gnome-shell/gnome-shell.css
-```
-
-V live režimu se nested Shell po změně CSS restartuje automaticky.
-
-Opakovatelné GNOME Shell vrstvy se dají generovat ze Sass zdrojů:
+Potom aplikuj nový hover explicitně:
 
 ```bash
-core/scripts/build-theme-sass.sh --check
-core/scripts/build-theme-sass.sh --apply
+fedora-nova hover none --reload
+fedora-nova hover circle --reload
 ```
 
-Tailwind pro Shell theme nepoužíváme, protože GNOME Shell není webový DOM.
-Release artefaktem zůstává obyčejné CSS.
+Nejjistější je následný relogin.
 
-## Kde upravovat Settings aplikaci
+## Hover režimy
 
-```text
-src/fedora_nova/window.py
-src/fedora_nova/pages.py
-src/fedora_nova/style.css
+```bash
+fedora-nova hover circle --reload
+fedora-nova hover circle-compact --reload
+fedora-nova hover tile --reload
+fedora-nova hover none --reload
+fedora-nova hover previous --reload
 ```
+
+## Folder dialog
+
+Velký SVG superellipse dialog složky z 0.6.2/0.6.3 zůstává beze změny.
