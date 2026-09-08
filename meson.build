@@ -33,6 +33,7 @@ install_subdir(
     'SHA256SUMS',
     'scripts/build-theme-sass.sh',
     'scripts/preview_reload.py',
+    'scripts/theme_hot_reload.py',
   ],
 )
 
