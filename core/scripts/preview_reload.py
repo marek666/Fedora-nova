@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import fnmatch
 import hashlib
 import json
 import os
 from pathlib import Path
+import selectors
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -48,6 +51,16 @@ IGNORE_GLOBS = (
     ".dev-build/**",
     ".git",
     ".git/**",
+    "_build",
+    "_build/**",
+    "builddir",
+    "builddir/**",
+    ".flatpak-build-test",
+    ".flatpak-build-test/**",
+)
+
+INOTIFY_EXCLUDE_REGEX = (
+    r"(^|/)(\.git|\.dev-build|__pycache__|_build|builddir|\.flatpak-build-test)(/|$)"
 )
 
 THEME_GLOBS = (
@@ -76,6 +89,18 @@ FULL_GLOBS = (
     "core/third-party/topbar-all-monitors/**",
     "core/extensions/**",
 )
+
+_TRANSIENT_SCAN_ERRNOS = {
+    errno.ENOENT,
+    errno.ENOTDIR,
+    errno.EINVAL,
+}
+
+_PARENT_CHECK_SECONDS = 0.25
+
+
+class SupervisorGone(RuntimeError):
+    """Raised when a token-bound preview supervisor no longer owns this watcher."""
 
 
 def _match(path: str, patterns: Iterable[str]) -> bool:
@@ -282,13 +307,39 @@ def _watch_signature(path: Path) -> tuple[object, ...]:
     return ("other", info.st_mtime_ns, info.st_size, info.st_ino, mode)
 
 
+def _watch_signature_with_retry(path: Path) -> tuple[object, ...] | None:
+    """Read one entry without turning ordinary replace/delete races into failures."""
+    for attempt in range(3):
+        try:
+            return _watch_signature(path)
+        except OSError as exc:
+            if exc.errno not in _TRANSIENT_SCAN_ERRNOS:
+                raise
+            if attempt < 2:
+                time.sleep(0)
+    return None
+
+
+def _walk_onerror(exc: OSError) -> None:
+    # Deleting or replacing a directory during traversal is transient. Access
+    # failures and other real traversal errors must remain visible to callers.
+    if exc.errno in {errno.ENOENT, errno.ENOTDIR}:
+        return
+    raise exc
+
+
 def _scan_repo_state(repo_root: Path) -> dict[str, tuple[object, ...]]:
     root = repo_root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError(f"repo root is not a directory: {root}")
 
     state: dict[str, tuple[object, ...]] = {}
-    for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+    for dirpath, dirnames, filenames in os.walk(
+        root,
+        topdown=True,
+        followlinks=False,
+        onerror=_walk_onerror,
+    ):
         directory = Path(dirpath)
         kept_dirs: list[str] = []
 
@@ -297,9 +348,18 @@ def _scan_repo_state(repo_root: Path) -> dict[str, tuple[object, ...]]:
             rel = entry.relative_to(root).as_posix()
             if _match(rel, IGNORE_GLOBS):
                 continue
-            if entry.is_symlink():
-                state[rel] = _watch_signature(entry)
+
+            signature = _watch_signature_with_retry(entry)
+            if signature is None:
                 continue
+            kind = signature[0]
+            if kind == "link" or kind == "file":
+                state[rel] = signature
+                continue
+
+            # A constant directory marker detects empty-directory create/delete
+            # without turning every child mtime update into a second change.
+            state[rel] = ("dir",)
             kept_dirs.append(name)
         dirnames[:] = kept_dirs
 
@@ -308,33 +368,65 @@ def _scan_repo_state(repo_root: Path) -> dict[str, tuple[object, ...]]:
             rel = entry.relative_to(root).as_posix()
             if _match(rel, IGNORE_GLOBS):
                 continue
-            try:
-                state[rel] = _watch_signature(entry)
-            except FileNotFoundError:
-                # Atomic-save races are observed on the next poll.
-                continue
+            signature = _watch_signature_with_retry(entry)
+            if signature is not None:
+                state[rel] = signature
 
     return state
 
 
-def watch_once(
-    repo_root: Path,
-    debounce_seconds: float = 0.25,
-    poll_seconds: float = 0.10,
-) -> tuple[str, list[dict[str, str]]]:
-    if debounce_seconds <= 0:
-        raise ValueError("debounce must be greater than zero")
-    if poll_seconds <= 0:
-        raise ValueError("poll interval must be greater than zero")
+def _valid_preview_token(token: str | None) -> bool:
+    if token is None or len(token) != 32:
+        return False
+    return all(char in "0123456789abcdefABCDEF" for char in token)
 
+
+def _process_has_token(pid: int, token: str) -> bool:
+    if pid <= 0 or not _valid_preview_token(token):
+        return False
+    try:
+        environ = Path(f"/proc/{pid}/environ").read_bytes()
+    except FileNotFoundError:
+        return False
+    marker = os.fsencode(f"NOVA_PREVIEW_TOKEN={token}")
+    return marker in environ.split(b"\0")
+
+
+def _ensure_supervisor(supervisor_pid: int | None, token: str | None) -> None:
+    if supervisor_pid is None:
+        return
+    if not _valid_preview_token(token):
+        raise ValueError("supervisor token is missing or invalid")
+    if not _process_has_token(supervisor_pid, token):
+        raise SupervisorGone("preview supervisor is no longer running")
+
+
+def _watch_once_polling(
+    repo_root: Path,
+    debounce_seconds: float,
+    poll_seconds: float,
+    supervisor_pid: int | None,
+    supervisor_token: str | None,
+) -> tuple[str, list[dict[str, str]]]:
     root = repo_root.resolve(strict=True)
+    _ensure_supervisor(supervisor_pid, supervisor_token)
     previous = _scan_repo_state(root)
     pending: set[str] = set()
     deadline: float | None = None
+    next_scan = time.monotonic() + poll_seconds
 
     while True:
-        time.sleep(poll_seconds)
+        now = time.monotonic()
+        sleep_for = min(_PARENT_CHECK_SECONDS, max(0.0, next_scan - now))
+        if sleep_for > 0:
+            time.sleep(sleep_for)
+        _ensure_supervisor(supervisor_pid, supervisor_token)
+
+        now = time.monotonic()
+        if now < next_scan:
+            continue
         current = _scan_repo_state(root)
+        next_scan = now + poll_seconds
         changed = {
             path
             for path in previous.keys() | current.keys()
@@ -356,13 +448,178 @@ def watch_once(
             return action, details
 
 
+def _inotify_command(binary: str, root: Path) -> list[str]:
+    return [
+        binary,
+        "--monitor",
+        "--recursive",
+        "--quiet",
+        "--no-dereference",
+        "--event",
+        "create",
+        "--event",
+        "delete",
+        "--event",
+        "modify",
+        "--event",
+        "attrib",
+        "--event",
+        "moved_to",
+        "--event",
+        "moved_from",
+        "--format",
+        "%w%f%0",
+        "--no-newline",
+        "--exclude",
+        INOTIFY_EXCLUDE_REGEX,
+        os.fspath(root),
+    ]
+
+
+def _watch_once_inotify(
+    repo_root: Path,
+    debounce_seconds: float,
+    supervisor_pid: int | None,
+    supervisor_token: str | None,
+) -> tuple[str, list[dict[str, str]]]:
+    binary = shutil.which("inotifywait")
+    if binary is None:
+        raise RuntimeError("inotifywait is not available")
+
+    root = repo_root.resolve(strict=True)
+    _ensure_supervisor(supervisor_pid, supervisor_token)
+    env = os.environ.copy()
+    env["LC_ALL"] = "C"
+    process = subprocess.Popen(
+        _inotify_command(binary, root),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        start_new_session=False,
+    )
+    if process.stdout is None or process.stderr is None:
+        process.kill()
+        process.wait()
+        raise RuntimeError("failed to capture inotifywait output")
+
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+    buffer = b""
+    pending: set[str] = set()
+    deadline: float | None = None
+
+    try:
+        while True:
+            _ensure_supervisor(supervisor_pid, supervisor_token)
+            now = time.monotonic()
+            timeout = _PARENT_CHECK_SECONDS
+            if deadline is not None:
+                timeout = min(timeout, max(0.0, deadline - now))
+
+            ready = selector.select(timeout)
+            _ensure_supervisor(supervisor_pid, supervisor_token)
+
+            if not ready:
+                if process.poll() is not None:
+                    stderr = process.stderr.read().decode("utf-8", errors="replace").strip()
+                    detail = stderr or f"inotifywait exited with status {process.returncode}"
+                    raise RuntimeError(detail)
+                if pending and deadline is not None and time.monotonic() >= deadline:
+                    action, details = classify_paths(sorted(pending), root)
+                    if action == IGNORE:
+                        pending.clear()
+                        deadline = None
+                        continue
+                    return action, details
+                continue
+
+            chunk = os.read(process.stdout.fileno(), 65536)
+            if not chunk:
+                if process.poll() is None:
+                    continue
+                stderr = process.stderr.read().decode("utf-8", errors="replace").strip()
+                detail = stderr or f"inotifywait exited with status {process.returncode}"
+                raise RuntimeError(detail)
+            buffer += chunk
+
+            while b"\0" in buffer:
+                raw_path, buffer = buffer.split(b"\0", 1)
+                if not raw_path:
+                    continue
+                event_path = _lexical_absolute(Path(os.fsdecode(raw_path)))
+                try:
+                    rel = event_path.relative_to(root).as_posix()
+                except ValueError:
+                    continue
+                if not rel or _match(rel, IGNORE_GLOBS):
+                    continue
+                pending.add(rel)
+                deadline = time.monotonic() + debounce_seconds
+    finally:
+        selector.close()
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+
+
+def watch_once(
+    repo_root: Path,
+    debounce_seconds: float = 0.25,
+    poll_seconds: float = 0.50,
+    collector: str = "auto",
+    supervisor_pid: int | None = None,
+    supervisor_token: str | None = None,
+) -> tuple[str, list[dict[str, str]]]:
+    if debounce_seconds <= 0:
+        raise ValueError("debounce must be greater than zero")
+    if poll_seconds <= 0:
+        raise ValueError("poll interval must be greater than zero")
+    if collector not in {"auto", "inotify", "poll"}:
+        raise ValueError(f"unknown collector: {collector}")
+
+    root = repo_root.resolve(strict=True)
+    if not root.is_dir():
+        raise ValueError(f"repo root is not a directory: {root}")
+
+    chosen = collector
+    if chosen == "auto":
+        chosen = "inotify" if shutil.which("inotifywait") else "poll"
+
+    if chosen == "inotify":
+        return _watch_once_inotify(
+            root,
+            debounce_seconds,
+            supervisor_pid,
+            supervisor_token,
+        )
+    return _watch_once_polling(
+        root,
+        debounce_seconds,
+        poll_seconds,
+        supervisor_pid,
+        supervisor_token,
+    )
+
+
 def _cmd_watch_once(args: argparse.Namespace) -> int:
+    token = os.environ.get("NOVA_PREVIEW_TOKEN") if args.supervisor_pid else None
     try:
         action, details = watch_once(
             Path(args.repo_root),
             debounce_seconds=args.debounce_ms / 1000.0,
             poll_seconds=args.poll_ms / 1000.0,
+            collector=args.collector,
+            supervisor_pid=args.supervisor_pid,
+            supervisor_token=token,
         )
+    except SupervisorGone:
+        # The supervisor owns this process. If it disappears abruptly there is
+        # nobody left to consume a result, so exit quietly after child cleanup.
+        return 0
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"preview_reload.py: watch-once: {exc}", file=sys.stderr)
         return 2
@@ -420,12 +677,18 @@ def build_parser() -> argparse.ArgumentParser:
     classify.set_defaults(func=_cmd_classify)
 
     watch_once_parser = sub.add_parser(
-    "watch-once",
-    help="wait for a debounced batch of repository changes and classify it",
-)
+        "watch-once",
+        help="wait for a debounced batch of repository changes and classify it",
+    )
     watch_once_parser.add_argument("--repo-root", required=True)
     watch_once_parser.add_argument("--debounce-ms", type=int, default=250)
-    watch_once_parser.add_argument("--poll-ms", type=int, default=100)
+    watch_once_parser.add_argument("--poll-ms", type=int, default=500)
+    watch_once_parser.add_argument(
+        "--collector",
+        choices=("auto", "inotify", "poll"),
+        default="auto",
+    )
+    watch_once_parser.add_argument("--supervisor-pid", type=int)
     watch_once_parser.add_argument("--json", action="store_true")
     watch_once_parser.set_defaults(func=_cmd_watch_once)
 
