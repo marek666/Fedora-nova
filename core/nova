@@ -11,7 +11,6 @@ Usage: fedora-nova COMMAND [ARGS]
 
   settings                             moderní GTK4/libadwaita nastavení
   preset [full] [PROFILE] [--reload]    kompletní persistentní Nova desktop
-  full-setup [PROFILE] [--reload]       alias pro preset full
   profile [NAME] [--reload]            profil nebo výpis profilů
   forge NAME PRIMARY [SECONDARY]       vytvoří a aplikuje vlastní profil
   custom list                          vlastní profily
@@ -72,7 +71,6 @@ case "$cmd" in
   preset)
     if [[ $# -eq 0 ]]; then "$ROOT/scripts/apply-preset.sh" list
     else "$ROOT/scripts/apply-preset.sh" "$@"; fi ;;
-  full-setup) "$ROOT/scripts/apply-preset.sh" full "$@" ;;
   profile)
     if [[ $# -eq 0 ]]; then "$ROOT/scripts/apply-profile.sh" list
     else "$ROOT/scripts/apply-profile.sh" "$@"; fi ;;
@@ -98,7 +96,7 @@ case "$cmd" in
   session-restore)
     if [[ $# -eq 0 ]]; then "$ROOT/scripts/session-restore.sh" status
     else "$ROOT/scripts/session-restore.sh" "$@"; fi ;;
-  migrate-installation|migrate) "$ROOT/scripts/migrate-installation.sh" "$@" ;;
+  migrate-installation) "$ROOT/scripts/migrate-installation.sh" "$@" ;;
   welcome) "$ROOT/scripts/disable-welcome.sh" "${1:-status}" ;;
   snapshot) "$ROOT/scripts/snapshot.sh" "$@" ;;
   export) "$ROOT/scripts/export-config.sh" "${1:-}" ;;
