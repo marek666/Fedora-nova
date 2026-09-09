@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0-dev — Repository and development cleanup
+## 0.8.0-dev — Repository, preview and Builder workflow cleanup
 
 - reorganized the GTK4/libadwaita application under `app/`,
 - separated application sources and application data,
@@ -11,9 +11,26 @@
 - updated development launchers for the new `app/` layout,
 - updated static checks for the reorganized source tree,
 - standardized current development version metadata to `0.8.0-dev`,
-- continued development of the isolated Mutter Development Kit Shell Preview,
-- prepared the project structure for the completed selective theme hot-reload work
-  to be merged separately.
+- integrated the tested selective GNOME Shell theme hot-reload implementation,
+- added transactional and lifecycle hardening for the nested Shell Preview,
+- kept full nested Shell restart as the conservative fallback for changes that
+  cannot be applied live,
+- rebuilt the GNOME Builder development workflow around the current checkout,
+- made Native Preview use an isolated development configuration instead of the
+  normal host Fedora Nova state,
+- pinned Native Preview and Native Host to the current checkout CLI, core and
+  Shell Preview helper,
+- required explicit Host authorization for native Host mode,
+- made native development instances independent from stale GApplication
+  activation in another mode or worktree,
+- made the development Flatpak permanently Preview-only,
+- removed the development Flatpak host-spawn permission and disabled the
+  Flatpak-to-host bridge,
+- made Shell Preview unavailable from the development Flatpak,
+- added Builder workflow regression tests,
+- verified GNOME Builder 50 Build + Run with GNOME Platform/SDK 50,
+- verified Flatpak build, install and AppStream composition,
+- verified hot-reload unit and lifecycle suites after the Builder changes.
 
 ## 0.7.2-dev — Full System Setup
 

@@ -1,0 +1,286 @@
+"""Builder boundaries; backend calls never modify the host GNOME session."""
+import json
+import os
+from pathlib import Path
+import select
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "app/src"))
+from fedora_nova import backend as backend_module
+
+
+class BackendBoundaries(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="nova-builder-unit-")
+        self.addCleanup(self.tmp.cleanup)
+        self.env = {
+            "HOME": self.tmp.name,
+            "XDG_CONFIG_HOME": self.tmp.name,
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        }
+        self.enterContext(patch.dict(os.environ, self.env, clear=True))
+        self.enterContext(patch.object(backend_module, "CORE_ROOT", REPO / "core"))
+
+    def test_native_host_needs_both_explicit_flags(self):
+        for preview, allowed, expected in [
+            (None, None, False), (None, "1", False),
+            ("0", None, False), ("0", "0", False),
+            ("1", "1", False), ("0", "1", True),
+        ]:
+            with self.subTest(preview=preview, allowed=allowed):
+                env = dict(self.env)
+                if preview is not None:
+                    env["FEDORA_NOVA_PREVIEW"] = preview
+                if allowed is not None:
+                    env["FEDORA_NOVA_HOST_ALLOWED"] = allowed
+                with patch.dict(os.environ, env, clear=True):
+                    backend = backend_module.Backend()
+                    self.assertEqual(backend.host_allowed, expected)
+                    self.assertEqual(backend.can_host, expected)
+                    self.assertEqual(backend.runtime_mode, "host" if expected else "preview")
+                    self.assertEqual(backend.set_runtime_mode("host").ok, expected)
+
+    def test_flatpak_rejects_modes_and_all_host_entrypoints(self):
+        exists = Path.exists
+        for preview, allowed in [(None, None), ("1", "1"), ("0", None), ("0", "1")]:
+            with self.subTest(preview=preview, allowed=allowed):
+                env = dict(self.env)
+                if preview is not None:
+                    env["FEDORA_NOVA_PREVIEW"] = preview
+                if allowed is not None:
+                    env["FEDORA_NOVA_HOST_ALLOWED"] = allowed
+                with patch.dict(os.environ, env, clear=True), patch.object(
+                    Path, "exists", lambda p: str(p) == "/.flatpak-info" or exists(p)
+                ), patch.object(backend_module.subprocess, "run") as run, patch.object(
+                    backend_module.subprocess, "Popen"
+                ) as popen:
+                    backend = backend_module.Backend()
+                    self.assertEqual(backend.runtime_mode, "preview")
+                    self.assertFalse(backend.host_allowed)
+                    self.assertFalse(backend.can_host)
+                    self.assertFalse(backend.set_runtime_mode("host").ok)
+                    self.assertFalse(backend.shell_preview_available())
+                    self.assertFalse(backend.shell_preview_running())
+                    self.assertIsNone(backend._shell_preview_helper())
+                    for result in [
+                        backend._host_spawn(["/usr/bin/true"]),
+                        backend._host_shell("true"),
+                        backend._host_cli("status"),
+                        backend._run_native("status"),
+                        backend.launch_shell_preview("tech"),
+                        backend.launch_shell_preview("tech", watch=True),
+                        backend.stop_shell_preview(),
+                    ]:
+                        self.assertFalse(result.ok)
+                    self.assertTrue(backend.run("profile", "tech").ok)
+                    run.assert_not_called()
+                    popen.assert_not_called()
+                    self.assertEqual(backend.runtime_mode, "preview")
+
+    def test_explicit_helper_never_falls_back_when_missing_or_not_executable(self):
+        helper = Path(self.tmp.name) / "checkout with spaces" / "dev-shell-preview.sh"
+        helper.parent.mkdir()
+        os.environ["FEDORA_NOVA_SHELL_PREVIEW"] = str(helper)
+        backend = backend_module.Backend()
+        with patch.object(backend_module.shutil, "which", return_value="/stale/helper") as which:
+            self.assertIsNone(backend._shell_preview_helper())
+            helper.write_text("#!/bin/sh\nexit 0\n")
+            helper.chmod(0o644)
+            self.assertFalse(backend.shell_preview_available())
+            helper.chmod(0o755)
+            self.assertEqual(backend._shell_preview_helper(), str(helper))
+            with patch.object(backend_module.subprocess, "Popen") as popen:
+                self.assertTrue(backend.launch_shell_preview("tech").ok)
+                popen.assert_called_once_with([str(helper), "tech"])
+            which.assert_not_called()
+
+    def test_checkout_helper_precedes_global_helper(self):
+        backend = backend_module.Backend()
+        with patch.object(backend_module.shutil, "which", return_value="/stale/helper"):
+            self.assertEqual(backend._shell_preview_helper(), str(REPO / "dev-shell-preview.sh"))
+
+    def test_explicit_missing_cli_does_not_fall_back(self):
+        os.environ["FEDORA_NOVA_CLI"] = str(Path(self.tmp.name) / "missing-cli")
+        with patch.object(backend_module.shutil, "which", return_value="/stale/cli") as which:
+            self.assertIsNone(backend_module.Backend().cli)
+            which.assert_not_called()
+
+
+# Executed in place of the launcher's final python3 invocation. It imports the
+# actual application, suppresses only display styling, and registers it on the
+# private test bus. No window is created and no runtime CLI is executed.
+APPLICATION_PROBE = '''#!/usr/bin/python3
+import json, os
+from unittest.mock import patch
+from gi.repository import GLib
+from fedora_nova.application import NovaApplication
+from fedora_nova.backend import Backend
+from fedora_nova.constants import PROJECT_ROOT, CORE_ROOT
+with patch.object(NovaApplication, "_configure_style"), patch.object(NovaApplication, "_load_css"):
+    app = NovaApplication()
+app.register(None)
+backend = Backend()
+print(json.dumps(dict(remote=app.get_is_remote(), flags=int(app.get_flags()),
+    mode=backend.runtime_mode, allowed=backend.host_allowed, can_host=backend.can_host,
+    project=str(PROJECT_ROOT), core=str(CORE_ROOT), cli=str(backend.cli),
+    config=str(backend.nova_config),
+    helper=backend._shell_preview_helper(), app_dir=os.environ.get("FEDORA_NOVA_APP_DIR"),
+    pythonpath=os.environ.get("PYTHONPATH"), marker=os.environ.get("FEDORA_NOVA_DEV_NON_UNIQUE"))), flush=True)
+loop = GLib.MainLoop()
+def stop_if_requested(*args):
+    loop.quit()
+    return False
+GLib.io_add_watch(0, GLib.IO_IN | GLib.IO_HUP, stop_if_requested)
+loop.run()
+'''
+
+
+class NativeLaunchers(unittest.TestCase):
+    def test_preview_state_is_isolated_and_host_config_is_preserved(self):
+        for custom_config in [False, True]:
+            with self.subTest(custom_config=custom_config), tempfile.TemporaryDirectory(
+                prefix="nova-builder-config-"
+            ) as tmp:
+                root = Path(tmp)
+                checkout = root / "checkout with spaces"
+                checkout.mkdir()
+                shutil.copy2(REPO / "dev-run.sh", checkout / "dev-run.sh")
+                for name in ["app", "core"]:
+                    (checkout / name).symlink_to(REPO / name, target_is_directory=True)
+                home = root / "home"
+                host_config = root / "custom-config" if custom_config else home / ".config"
+                host_state = host_config / "fedora-nova/current-profile"
+                host_state.parent.mkdir(parents=True)
+                host_state.write_text("host-profile\n")
+                # Even with a custom XDG path, the default host config is untouched.
+                default_state = home / ".config/fedora-nova/current-profile"
+                default_state.parent.mkdir(parents=True, exist_ok=True)
+                default_state.write_text("host-profile\n")
+                binary = root / "bin"
+                binary.mkdir()
+                observer = binary / "python3"
+                observer.write_text("""#!/usr/bin/python3
+import json
+from fedora_nova.backend import Backend
+backend = Backend()
+before = backend.read_state("current-profile", "unset")
+if backend.preview:
+    backend.write_state("current-profile", "preview-profile")
+print(json.dumps(dict(config=str(backend.nova_config), before=before,
+                      after=backend.read_state("current-profile", "unset"))))
+""")
+                observer.chmod(0o755)
+                env = {k: v for k, v in os.environ.items()
+                       if not k.startswith(("FEDORA_NOVA_", "XDG_"))}
+                env.update(HOME=str(home), PATH=str(binary) + ":" + os.environ["PATH"],
+                           PYTHONDONTWRITEBYTECODE="1")
+                if custom_config:
+                    env["XDG_CONFIG_HOME"] = str(host_config)
+                for mode in ["preview", "host"]:
+                    result = subprocess.run([str(checkout / "dev-run.sh"), mode],
+                                            env=env, capture_output=True, text=True, timeout=10)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    data = json.loads(result.stdout)
+                    expected = (checkout / ".dev-build/preview-config/fedora-nova"
+                                if mode == "preview" else host_config / "fedora-nova")
+                    self.assertEqual(data["config"], str(expected))
+                    self.assertEqual(data["before"], "unset" if mode == "preview" else "host-profile")
+                    self.assertEqual(data["after"], "preview-profile" if mode == "preview" else "host-profile")
+                    self.assertEqual(host_state.read_text(), "host-profile\n")
+                    self.assertEqual(default_state.read_text(), "host-profile\n")
+                preview_state = checkout / ".dev-build/preview-config/fedora-nova/current-profile"
+                self.assertEqual(preview_state.read_text(), "preview-profile\n")
+
+    def test_non_unique_is_native_development_only(self):
+        from gi.repository import Gio
+        from fedora_nova.application import NovaApplication
+
+        exists = os.path.exists
+        for marker, flatpak, non_unique in [(None, False, False), ("1", False, True),
+                                            (None, True, False), ("1", True, False)]:
+            with self.subTest(marker=marker, flatpak=flatpak), patch.dict(os.environ):
+                os.environ.pop("FEDORA_NOVA_DEV_NON_UNIQUE", None)
+                if marker is not None:
+                    os.environ["FEDORA_NOVA_DEV_NON_UNIQUE"] = marker
+                with patch("os.path.exists", side_effect=lambda p: flatpak if p == "/.flatpak-info" else exists(p)), patch.object(
+                    NovaApplication, "_configure_style"
+                ), patch.object(NovaApplication, "_load_css"):
+                    app = NovaApplication()
+                    self.assertEqual(bool(app.get_flags() & Gio.ApplicationFlags.NON_UNIQUE), non_unique)
+
+
+    def test_poisoned_environment_and_two_independent_native_instances(self):
+        if os.environ.get("NOVA_BUILDER_PRIVATE_BUS") != "1":
+            if not shutil.which("dbus-run-session"):
+                self.skipTest("dbus-run-session unavailable")
+            env = {**os.environ, "NOVA_BUILDER_PRIVATE_BUS": "1"}
+            result = subprocess.run(
+                ["dbus-run-session", "--", sys.executable, "-B", "-m", "unittest", "-v",
+                 f"{__name__}.NativeLaunchers.test_poisoned_environment_and_two_independent_native_instances"],
+                cwd=REPO, env=env, capture_output=True, text=True, timeout=40,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return
+
+        with tempfile.TemporaryDirectory(prefix="nova-builder-native-") as tmp:
+            root = Path(tmp)
+            binary = root / "bin"
+            binary.mkdir()
+            observer = binary / "python3"
+            observer.write_text(APPLICATION_PROBE)
+            observer.chmod(0o755)
+            env = {k: v for k, v in os.environ.items() if not k.startswith(("FEDORA_NOVA_", "XDG_"))}
+            env.update(HOME=tmp, XDG_CONFIG_HOME=str(root / "config"),
+                       XDG_DATA_HOME=str(root / "data"), XDG_STATE_HOME=str(root / "state"),
+                       XDG_CACHE_HOME=str(root / "cache"), GSETTINGS_BACKEND="memory",
+                       PATH=str(binary) + ":" + os.environ["PATH"], PYTHONDONTWRITEBYTECODE="1",
+                       PYTHONPATH="/stale/python", FEDORA_NOVA_PROJECT_ROOT="/stale/repo",
+                       FEDORA_NOVA_CORE="/stale/core",
+                       FEDORA_NOVA_CLI=str(Path.home() / ".local/bin/fedora-nova"),
+                       FEDORA_NOVA_APP_DIR=str(Path.home() / ".local/share/fedora-nova"),
+                       FEDORA_NOVA_HOST_ALLOWED="1",
+                       FEDORA_NOVA_SHELL_PREVIEW="/stale/dev-shell-preview.sh")
+            processes = []
+            try:
+                for mode in ["preview", "host"]:
+                    process = subprocess.Popen([str(REPO / "dev-run.sh"), mode], env=env,
+                                               stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                               stderr=subprocess.PIPE, text=True)
+                    processes.append(process)
+                    self.assertTrue(select.select([process.stdout], [], [], 10)[0], "application probe timed out")
+                    line = process.stdout.readline()
+                    if not line:
+                        self.fail(process.communicate(timeout=5)[1])
+                    result = json.loads(line)
+                    self.assertFalse(result["remote"])
+                    self.assertEqual(result["mode"], mode)
+                    expected_config = (REPO / ".dev-build/preview-config/fedora-nova"
+                                       if mode == "preview" else root / "config/fedora-nova")
+                    self.assertEqual(result["config"], str(expected_config))
+                    self.assertEqual(result["allowed"], mode == "host")
+                    self.assertEqual(result["can_host"], mode == "host")
+                    self.assertEqual(result["project"], str(REPO))
+                    self.assertEqual(result["core"], str(REPO / "core"))
+                    self.assertEqual(result["cli"], str(REPO / "core/nova"))
+                    self.assertEqual(result["app_dir"], str(REPO / "core"))
+                    self.assertEqual(result["helper"], str(REPO / "dev-shell-preview.sh"))
+                    self.assertEqual(result["pythonpath"], str(REPO / "app/src"))
+                    self.assertEqual(result["marker"], "1")
+                self.assertTrue(all(p.poll() is None for p in processes))
+            finally:
+                for process in processes:
+                    try:
+                        process.communicate(input="stop\n", timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.communicate()
+
+
+if __name__ == "__main__":
+    unittest.main()
