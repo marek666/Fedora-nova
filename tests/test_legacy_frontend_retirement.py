@@ -32,10 +32,12 @@ class LegacyFrontendRetirementTests(unittest.TestCase):
         self.assertIn("FEDORA_NOVA_SETTINGS_LAUNCHER", text)
         self.assertIn("Production Settings launcher není dostupný", text)
 
-    def test_control_remains_only_a_compatibility_alias(self) -> None:
+    def test_control_alias_is_retired(self) -> None:
         text = NOVA.read_text(encoding="utf-8")
-        self.assertIn("settings|control) launch_settings", text)
-        self.assertIn("alias pro settings", text)
+        self.assertIn("settings) launch_settings", text)
+        self.assertNotIn("settings|control) launch_settings", text)
+        self.assertNotIn("alias pro settings", text)
+        self.assertNotIn("\n  control ", text)
 
     def test_standalone_assets_install_only_cli_integration(self) -> None:
         text = INSTALL_ASSETS.read_text(encoding="utf-8")
