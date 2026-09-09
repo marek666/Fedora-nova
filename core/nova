@@ -5,12 +5,11 @@ source "$ROOT/scripts/lib.sh"
 
 usage() {
   cat <<'USAGE'
-Fedora Nova Control
+Fedora Nova CLI
 
 Usage: fedora-nova COMMAND [ARGS]
 
   settings                             moderní GTK4/libadwaita nastavení
-  control                              alias pro settings
   preset [full] [PROFILE] [--reload]    kompletní persistentní Nova desktop
   full-setup [PROFILE] [--reload]       alias pro preset full
   profile [NAME] [--reload]            profil nebo výpis profilů
@@ -69,7 +68,7 @@ launch_settings() {
 cmd="${1:-help}"
 shift || true
 case "$cmd" in
-  settings|control) launch_settings "$@" ;;
+  settings) launch_settings "$@" ;;
   preset)
     if [[ $# -eq 0 ]]; then "$ROOT/scripts/apply-preset.sh" list
     else "$ROOT/scripts/apply-preset.sh" "$@"; fi ;;
