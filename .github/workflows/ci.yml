@@ -59,9 +59,14 @@ jobs:
           fi
 
           core_root="_staging/usr/share/fedora-nova/core"
-          for forbidden in install.sh uninstall.sh scripts/install-assets.sh; do
+          for forbidden in \
+            install.sh \
+            uninstall.sh \
+            config/packages.txt \
+            scripts/install-assets.sh \
+            scripts/check-compatibility.sh; do
             if [[ -e "$core_root/$forbidden" ]]; then
-              echo "Legacy standalone installer leaked into package runtime: $forbidden" >&2
+              echo "Source-only compatibility file leaked into package runtime: $forbidden" >&2
               exit 1
             fi
           done
