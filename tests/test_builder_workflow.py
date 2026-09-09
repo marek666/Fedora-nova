@@ -1,6 +1,7 @@
 """Builder boundaries; backend calls never modify the host GNOME session."""
 import json
 import os
+import runpy
 from pathlib import Path
 import select
 import shutil
@@ -14,6 +15,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "app/src"))
 from fedora_nova import backend as backend_module
 
+DEVEL_ID = "io.github.fedoranova.FedoraNova.Devel"
+PRODUCTION_ID = "io.github.fedoranova.FedoraNova"
+
 
 class BackendBoundaries(unittest.TestCase):
     def setUp(self):
@@ -26,6 +30,29 @@ class BackendBoundaries(unittest.TestCase):
         }
         self.enterContext(patch.dict(os.environ, self.env, clear=True))
         self.enterContext(patch.object(backend_module, "CORE_ROOT", REPO / "core"))
+
+    def test_identity_defaults_and_explicit_native_host(self):
+        for requested, preview, allowed, expected in [
+            (None, None, None, DEVEL_ID),
+            (None, "0", "1", DEVEL_ID),
+            (DEVEL_ID, "0", "1", DEVEL_ID),
+            ("invalid.application", "0", "1", DEVEL_ID),
+            (PRODUCTION_ID, None, None, DEVEL_ID),
+            (PRODUCTION_ID, "0", None, DEVEL_ID),
+            (PRODUCTION_ID, "0", "0", DEVEL_ID),
+            (PRODUCTION_ID, "1", "1", DEVEL_ID),
+            (PRODUCTION_ID, "0", "1", PRODUCTION_ID),
+        ]:
+            with self.subTest(requested=requested, preview=preview, allowed=allowed):
+                env = dict(self.env)
+                for key, value in [("FEDORA_NOVA_APP_ID", requested),
+                                   ("FEDORA_NOVA_PREVIEW", preview),
+                                   ("FEDORA_NOVA_HOST_ALLOWED", allowed)]:
+                    if value is not None:
+                        env[key] = value
+                with patch.dict(os.environ, env, clear=True):
+                    constants = runpy.run_path(str(REPO / "app/src/fedora_nova/constants.py"))
+                    self.assertEqual(constants["APP_ID"], expected)
 
     def test_native_host_needs_both_explicit_flags(self):
         for preview, allowed, expected in [
@@ -60,6 +87,9 @@ class BackendBoundaries(unittest.TestCase):
                 ), patch.object(backend_module.subprocess, "run") as run, patch.object(
                     backend_module.subprocess, "Popen"
                 ) as popen:
+                    os.environ["FEDORA_NOVA_APP_ID"] = PRODUCTION_ID
+                    constants = runpy.run_path(str(REPO / "app/src/fedora_nova/constants.py"))
+                    self.assertEqual(constants["APP_ID"], DEVEL_ID)
                     backend = backend_module.Backend()
                     self.assertEqual(backend.runtime_mode, "preview")
                     self.assertFalse(backend.host_allowed)
@@ -118,15 +148,35 @@ class BackendBoundaries(unittest.TestCase):
 APPLICATION_PROBE = '''#!/usr/bin/python3
 import json, os
 from unittest.mock import patch
-from gi.repository import GLib
+from gi.repository import Gio, GLib
 from fedora_nova.application import NovaApplication
 from fedora_nova.backend import Backend
-from fedora_nova.constants import PROJECT_ROOT, CORE_ROOT
+from fedora_nova.constants import PROJECT_ROOT, CORE_ROOT, DEVEL_APP_ID, PRODUCTION_APP_ID
+from fedora_nova.state import WindowState
 with patch.object(NovaApplication, "_configure_style"), patch.object(NovaApplication, "_load_css"):
     app = NovaApplication()
 app.register(None)
 backend = Backend()
+window_state = WindowState()
+schemas = {}
+for identity in [DEVEL_APP_ID, PRODUCTION_APP_ID]:
+    schema = Gio.SettingsSchemaSource.get_default().lookup(identity, True)
+    schemas[identity] = dict(path=schema.get_path(), keys={
+        key: [schema.get_key(key).get_value_type().dup_string(),
+              schema.get_key(key).get_default_value().unpack()]
+        for key in schema.list_keys()
+    })
+# Use the fixture's memory backend to verify the two schema paths are independent.
+devel_state = Gio.Settings.new(DEVEL_APP_ID)
+host_state = Gio.Settings.new(PRODUCTION_APP_ID)
+devel_state.set_int("window-width", 480)
+host_state.set_int("window-width", 1200)
+assert devel_state.get_int("window-width") == 480
+assert host_state.get_int("window-width") == 1200
 print(json.dumps(dict(remote=app.get_is_remote(), flags=int(app.get_flags()),
+    app_id=app.get_application_id(), requested_id=os.environ.get("FEDORA_NOVA_APP_ID"),
+    schema_id=window_state.settings.props.schema_id,
+    schema_path=window_state.settings.props.path, schemas=schemas,
     mode=backend.runtime_mode, allowed=backend.host_allowed, can_host=backend.can_host,
     project=str(PROJECT_ROOT), core=str(CORE_ROOT), cli=str(backend.cli),
     config=str(backend.nova_config),
@@ -245,10 +295,12 @@ print(json.dumps(dict(config=str(backend.nova_config), before=before,
                        FEDORA_NOVA_CLI=str(Path.home() / ".local/bin/fedora-nova"),
                        FEDORA_NOVA_APP_DIR=str(Path.home() / ".local/share/fedora-nova"),
                        FEDORA_NOVA_HOST_ALLOWED="1",
+                       FEDORA_NOVA_APP_ID="stale.application.Identity",
                        FEDORA_NOVA_SHELL_PREVIEW="/stale/dev-shell-preview.sh")
             processes = []
             try:
                 for mode in ["preview", "host"]:
+                    env["FEDORA_NOVA_APP_ID"] = PRODUCTION_ID if mode == "preview" else DEVEL_ID
                     process = subprocess.Popen([str(REPO / "dev-run.sh"), mode], env=env,
                                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                                stderr=subprocess.PIPE, text=True)
@@ -260,6 +312,21 @@ print(json.dumps(dict(config=str(backend.nova_config), before=before,
                     result = json.loads(line)
                     self.assertFalse(result["remote"])
                     self.assertEqual(result["mode"], mode)
+                    expected_id = DEVEL_ID if mode == "preview" else PRODUCTION_ID
+                    self.assertEqual(result["app_id"], expected_id)
+                    self.assertEqual(result["requested_id"], expected_id)
+                    self.assertEqual(result["schema_id"], expected_id)
+                    schema_path = "/io/github/fedoranova/FedoraNova/"
+                    if mode == "preview":
+                        schema_path += "Devel/"
+                    self.assertEqual(result["schema_path"], schema_path)
+                    schemas = result["schemas"]
+                    self.assertEqual(schemas[DEVEL_ID]["path"], "/io/github/fedoranova/FedoraNova/Devel/")
+                    self.assertEqual(schemas[PRODUCTION_ID]["path"], "/io/github/fedoranova/FedoraNova/")
+                    self.assertEqual(schemas[PRODUCTION_ID]["keys"], schemas[DEVEL_ID]["keys"])
+                    self.assertEqual(set(schemas[PRODUCTION_ID]["keys"]), {
+                        "window-width", "window-height", "window-maximized", "last-page",
+                    })
                     expected_config = (REPO / ".dev-build/preview-config/fedora-nova"
                                        if mode == "preview" else root / "config/fedora-nova")
                     self.assertEqual(result["config"], str(expected_config))

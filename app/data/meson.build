@@ -17,6 +17,7 @@ install_data(
 
 install_data(
   'io.github.fedoranova.FedoraNova.Devel.gschema.xml',
+  'io.github.fedoranova.FedoraNova.gschema.xml',
   install_dir: join_paths(get_option('datadir'), 'glib-2.0', 'schemas'),
 )
 
