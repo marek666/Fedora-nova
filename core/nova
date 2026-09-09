@@ -9,7 +9,7 @@ Fedora Nova Control
 
 Usage: fedora-nova COMMAND [ARGS]
 
-  settings                             nativní GTK4/libadwaita nastavení
+  settings                             moderní GTK4/libadwaita nastavení
   control                              alias pro settings
   preset [full] [PROFILE] [--reload]    kompletní persistentní Nova desktop
   full-setup [PROFILE] [--reload]       alias pro preset full
@@ -56,13 +56,14 @@ launch_settings() {
   case "$ROOT" in
     */share/fedora-nova/core) prefix="${ROOT%/share/fedora-nova/core}" ;;
     */share/fedora-nova) prefix="${ROOT%/share/fedora-nova}" ;;
-    *) exec "$ROOT/scripts/control.sh" "$@" ;;
+    *)
+      die "Production Settings launcher není dostupný pro tento source/core-only runtime. Použij canonical package instalaci nebo explicitní FEDORA_NOVA_SETTINGS_LAUNCHER."
+      ;;
   esac
   launcher="$prefix/bin/fedora-nova-settings"
-  if [[ -f "$launcher" && -x "$launcher" ]]; then
-    exec "$launcher" "$@"
-  fi
-  exec "$ROOT/scripts/control.sh" "$@"
+  [[ -f "$launcher" && -x "$launcher" ]] ||
+    die "Production Settings launcher není dostupný: $launcher. Nainstaluj Fedora Nova canonical package/frontend."
+  exec "$launcher" "$@"
 }
 
 cmd="${1:-help}"

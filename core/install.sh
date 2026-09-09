@@ -104,24 +104,24 @@ fi
 
 cat <<EOF2
 
-Fedora Nova $NOVA_VERSION — Hover & App Integration byla nainstalována.
+Fedora Nova $NOVA_VERSION — core-only kompatibilní instalace byla dokončena.
 
 Aktivní profil: $PROFILE
-Nastavení:      fedora-nova settings
-Terminál:       fedora-nova status
-Full setup:     fedora-nova preset full --reload
-Hover:          fedora-nova hover circle --reload
-GTK aplikace:   fedora-nova gtk status
-Ikony:          fedora-nova icons tela-steam
-Steam ikony:    fedora-nova steam-icons round
-Monitory:       fedora-nova monitors status
-Křivky:        fedora-nova curve squircle --reload
-Forge:          fedora-nova forge Ultraviolet '#D630F2' '#2ED8E8'
-Přepnutí:       fedora-nova profile pulse --reload
-Rollback:        fedora-nova rollback
-Snapshot:        fedora-nova snapshot create pred-zmenou
-Diagnostika:    fedora-nova doctor
-Nouzový režim:  fedora-nova safe-mode
+GUI Settings:    nejsou součástí core-only instalace; použij canonical package/frontend
+Terminál:        fedora-nova status
+Full setup:      fedora-nova preset full --reload
+Hover:           fedora-nova hover circle --reload
+GTK aplikace:    fedora-nova gtk status
+Ikony:           fedora-nova icons tela-steam
+Steam ikony:     fedora-nova steam-icons round
+Monitory:        fedora-nova monitors status
+Křivky:          fedora-nova curve squircle --reload
+Forge:            fedora-nova forge Ultraviolet '#D630F2' '#2ED8E8'
+Přepnutí:         fedora-nova profile pulse --reload
+Rollback:         fedora-nova rollback
+Snapshot:         fedora-nova snapshot create pred-zmenou
+Diagnostika:      fedora-nova doctor
+Nouzový režim:    fedora-nova safe-mode
 
 Pokud shell neukáže všechny změny, odhlas se a znovu přihlas.
 EOF2
