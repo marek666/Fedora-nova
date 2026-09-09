@@ -24,44 +24,81 @@ launcher_path() {
   printf '%s\n' "$NOVA_CONFIG_DIR/session-restore"
 }
 
-write_launcher() {
-  local launcher nova_cmd quoted_app quoted_nova
-  launcher="$(launcher_path)"
-  nova_cmd="$NOVA_APP_DIR/nova"
-  if [[ ! -x "$nova_cmd" ]]; then
-    nova_cmd="$(command -v fedora-nova || true)"
+resolve_session_cli() {
+  local lib core package prefix candidate
+  # Bind to the loaded physical runtime, never an inherited APP_DIR or PATH CLI.
+  lib="$(realpath -e -- "$SCRIPT_DIR/lib.sh")" ||
+    die "Nelze určit fyzický runtime pro autostart."
+  core="${lib%/*}"
+  core="${core%/*}"
+  package="${core%/*}"
+  if [[ "$core" == */share/fedora-nova/core ]] && package_layout_present "$package"; then
+    prefix="${core%/share/fedora-nova/core}"
+    candidate="$prefix/bin/fedora-nova"
+    if [[ -f "$candidate" && -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
   fi
-  [[ -n "$nova_cmd" && -x "$nova_cmd" ]] ||
-    die "Fedora Nova CLI nebylo nalezeno pro autostart."
-  mkdir -p "$NOVA_CONFIG_DIR"
-  printf -v quoted_app '%q' "$NOVA_APP_DIR"
-  printf -v quoted_nova '%q' "$nova_cmd"
-  {
-    printf '#!/usr/bin/env bash\n'
-    printf 'sleep "${FEDORA_NOVA_SESSION_DELAY:-2}"\n'
-    printf 'export FEDORA_NOVA_APP_DIR=%s\n' "$quoted_app"
-    printf 'exec %s session-restore --quiet\n' "$quoted_nova"
-  } > "$launcher"
-  chmod +x "$launcher"
+  candidate="$core/nova"
+  [[ -f "$candidate" && -x "$candidate" ]] ||
+    die "Fedora Nova CLI není spustitelné pro autostart: $candidate"
+  printf '%s\n' "$candidate"
 }
 
-enable_autostart() {
-  local launcher
-  write_launcher
+desktop_exec_path() {
+  local value="$1"
+  # Exec quoting first, then Desktop Entry string escaping (two distinct layers).
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//\$/\\\$}"
+  value="${value//\`/\\\`}"
+  value="${value//%/%%}"
+  value="${value//\\/\\\\}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\t'/\\t}"
+  value="${value//$'\r'/\\r}"
+  # '=' is forbidden in the executable token, and GLib checks executable
+  # existence before expanding '%%'. For those paths, pass the script as a
+  # Bash argument instead; this still uses no shell command string.
+  [[ "$1" != *=* && "$1" != *%* ]] || printf '/bin/bash '
+  printf '"%s"' "$value"
+}
+
+write_launcher() {
+  local quoted_nova
+  printf -v quoted_nova '%q' "$1"
+  printf '#!/usr/bin/env bash\n'
+  printf 'sleep "${FEDORA_NOVA_SESSION_DELAY:-2}"\n'
+  printf 'unset FEDORA_NOVA_APP_DIR FEDORA_NOVA_CORE FEDORA_NOVA_CLI\n'
+  printf 'exec %s session-restore --quiet\n' "$quoted_nova"
+}
+
+enable_autostart() (
+  local launcher nova_cmd launcher_tmp='' desktop_tmp=''
+  # Resolve before creating anything, so an unusable runtime preserves old files.
+  nova_cmd="$(resolve_session_cli)" || exit 1
   launcher="$(launcher_path)"
-  mkdir -p "$NOVA_AUTOSTART_DIR"
+  mkdir -p "$NOVA_CONFIG_DIR" "$NOVA_AUTOSTART_DIR"
+  trap 'rm -f -- "$launcher_tmp" "$desktop_tmp"' EXIT
+  launcher_tmp="$(mktemp "$NOVA_CONFIG_DIR/.session-restore.XXXXXX")"
+  desktop_tmp="$(mktemp "$NOVA_AUTOSTART_DIR/.fedora-nova-session.XXXXXX")"
+  write_launcher "$nova_cmd" > "$launcher_tmp"
+  chmod 700 "$launcher_tmp"
   {
     printf '[Desktop Entry]\n'
     printf 'Type=Application\n'
     printf 'Name=Fedora Nova Session Restore\n'
     printf 'Comment=Reapply Fedora Nova desktop theme after login\n'
-    printf 'Exec=%s\n' "$launcher"
+    printf 'Exec=%s\n' "$(desktop_exec_path "$launcher")"
     printf 'OnlyShowIn=GNOME;\n'
     printf 'X-GNOME-Autostart-enabled=true\n'
     printf 'NoDisplay=true\n'
-  } > "$NOVA_SESSION_AUTOSTART"
+  } > "$desktop_tmp"
+  mv -f -- "$launcher_tmp" "$launcher"
+  mv -f -- "$desktop_tmp" "$NOVA_SESSION_AUTOSTART"
   log "Automatické obnovení po přihlášení je zapnuté."
-}
+)
 
 disable_autostart() {
   rm -f "$NOVA_SESSION_AUTOSTART" "$(launcher_path)"
