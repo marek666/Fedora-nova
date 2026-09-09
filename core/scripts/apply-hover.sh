@@ -24,15 +24,18 @@ case "$MODE" in
   *) die "Použij: $0 {list|circle|circle-compact|tile|none|previous} [--reload]" ;;
 esac
 
+python3 "$SCRIPT_DIR/theme_runtime.py" "$NOVA_APP_DIR/themes" "$NOVA_THEMES_DIR" \
+  "$NOVA_APP_DIR/config/profiles.json" "$PROJECT_DIR/themes"
+
+RESULT="$(python3 "$SCRIPT_DIR/hover_style.py" "$MODE" \
+  "$NOVA_APP_DIR/config/profiles.json" "$NOVA_CUSTOM_DIR" \
+  "$NOVA_THEMES_DIR")"
 mkdir -p "$NOVA_CONFIG_DIR"
 CURRENT="$(current_hover)"
 if [[ "$CURRENT" != "$MODE" ]]; then
   printf '%s\n' "$CURRENT" > "$NOVA_CONFIG_DIR/previous-hover"
 fi
 
-RESULT="$(python3 "$SCRIPT_DIR/hover_style.py" "$MODE" \
-  "$NOVA_APP_DIR/config/profiles.json" "$NOVA_CUSTOM_DIR" \
-  "$PROJECT_DIR/themes" "$NOVA_APP_DIR/themes" "$NOVA_THEMES_DIR")"
 printf '%s\n' "$MODE" > "$NOVA_CONFIG_DIR/current-hover"
 disable_extension blur-my-shell@aunetx
 log "Hover: $MODE — ${RESULT%%$'\t'*} theme souborů upraveno."

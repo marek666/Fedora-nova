@@ -99,7 +99,8 @@ class Backend:
             return None
 
         explicit = os.environ.get("FEDORA_NOVA_SHELL_PREVIEW")
-        if explicit:
+        # An explicitly empty helper disables development Shell Preview.
+        if explicit is not None:
             candidate = Path(explicit)
             # An invalid explicit helper must not fall back to another worktree.
             if candidate.is_file() and os.access(candidate, os.X_OK):

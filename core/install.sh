@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname -- "$(realpath -e -- "${BASH_SOURCE[0]}")")"
 source "$PROJECT_DIR/scripts/lib.sh"
+
+APP_DEST="$NOVA_DATA_HOME/fedora-nova"
+require_legacy_layout "$PROJECT_DIR" "$APP_DEST"
 
 DRY_RUN=0
 SKIP_PACKAGES=0
@@ -72,9 +75,8 @@ if [[ $DRY_RUN -ne 1 && $NO_APPLY -ne 1 ]]; then
   "$PROJECT_DIR/scripts/backup-settings.sh" >/dev/null
 fi
 
-APP_DEST="${XDG_DATA_HOME:-$HOME/.local/share}/fedora-nova"
 log "Instaluji trvalou kopii do $APP_DEST"
-if [[ "$PROJECT_DIR" == "$APP_DEST" ]]; then
+if [[ "$PROJECT_DIR" == "$(realpath -m -- "$APP_DEST")" ]]; then
   log "Instalátor už běží z trvalé kopie; kopírování přeskakuji"
 elif [[ $DRY_RUN -eq 1 ]]; then
   printf '+ rm -rf %q\n' "$APP_DEST"
@@ -102,24 +104,24 @@ fi
 
 cat <<EOF2
 
-Fedora Nova $NOVA_VERSION — Hover & App Integration byla nainstalována.
+Fedora Nova $NOVA_VERSION — core-only kompatibilní instalace byla dokončena.
 
 Aktivní profil: $PROFILE
-Nastavení:      fedora-nova settings
-Terminál:       fedora-nova status
-Full setup:     fedora-nova preset full --reload
-Hover:          fedora-nova hover circle --reload
-GTK aplikace:   fedora-nova gtk status
-Ikony:          fedora-nova icons tela-steam
-Steam ikony:    fedora-nova steam-icons round
-Monitory:       fedora-nova monitors status
-Křivky:        fedora-nova curve squircle --reload
-Forge:          fedora-nova forge Ultraviolet '#D630F2' '#2ED8E8'
-Přepnutí:       fedora-nova profile pulse --reload
-Rollback:        fedora-nova rollback
-Snapshot:        fedora-nova snapshot create pred-zmenou
-Diagnostika:    fedora-nova doctor
-Nouzový režim:  fedora-nova safe-mode
+GUI Settings:    nejsou součástí core-only instalace; použij canonical package/frontend
+Terminál:        fedora-nova status
+Full setup:      fedora-nova preset full --reload
+Hover:           fedora-nova hover circle --reload
+GTK aplikace:    fedora-nova gtk status
+Ikony:           fedora-nova icons tela-steam
+Steam ikony:     fedora-nova steam-icons round
+Monitory:        fedora-nova monitors status
+Křivky:          fedora-nova curve squircle --reload
+Forge:            fedora-nova forge Ultraviolet '#D630F2' '#2ED8E8'
+Přepnutí:         fedora-nova profile pulse --reload
+Rollback:         fedora-nova rollback
+Snapshot:         fedora-nova snapshot create pred-zmenou
+Diagnostika:      fedora-nova doctor
+Nouzový režim:    fedora-nova safe-mode
 
 Pokud shell neukáže všechny změny, odhlas se a znovu přihlas.
 EOF2

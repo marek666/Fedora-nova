@@ -7,9 +7,11 @@ case "$MODE" in
   host)
     export FEDORA_NOVA_PREVIEW=0
     export FEDORA_NOVA_HOST_ALLOWED=1
+    export FEDORA_NOVA_APP_ID=io.github.fedoranova.FedoraNova
     ;;
   preview)
     export FEDORA_NOVA_PREVIEW=1
+    export FEDORA_NOVA_APP_ID=io.github.fedoranova.FedoraNova.Devel
     export XDG_CONFIG_HOME="$ROOT/.dev-build/preview-config"
     unset FEDORA_NOVA_HOST_ALLOWED
     ;;
@@ -30,7 +32,8 @@ export FEDORA_NOVA_DEV_NON_UNIQUE=1
 
 SCHEMA_DIR="$ROOT/.dev-build/schemas"
 mkdir -p "$SCHEMA_DIR"
-cp "$ROOT/app/data/io.github.fedoranova.FedoraNova.Devel.gschema.xml" "$SCHEMA_DIR/"
+cp "$ROOT/app/data/io.github.fedoranova.FedoraNova.Devel.gschema.xml" \
+  "$ROOT/app/data/io.github.fedoranova.FedoraNova.gschema.xml" "$SCHEMA_DIR/"
 if command -v glib-compile-schemas >/dev/null 2>&1; then
   glib-compile-schemas "$SCHEMA_DIR"
   export GSETTINGS_SCHEMA_DIR="$SCHEMA_DIR"

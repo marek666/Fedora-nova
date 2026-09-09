@@ -1,0 +1,11 @@
+
+[Desktop Entry]
+Name=Fedora Nova Settings
+Comment=Settings for Fedora Nova
+Exec=fedora-nova-settings
+Icon=io.github.fedoranova.FedoraNova
+Terminal=false
+Type=Application
+Categories=Settings;DesktopSettings;GTK;
+Keywords=Fedora;GNOME;theme;icons;dock;appearance;
+StartupNotify=true

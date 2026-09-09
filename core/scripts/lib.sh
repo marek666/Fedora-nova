@@ -6,7 +6,22 @@ NOVA_VERSION="0.8.0-dev"
 NOVA_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 NOVA_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 NOVA_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
-NOVA_APP_DIR="${FEDORA_NOVA_APP_DIR:-$NOVA_DATA_HOME/fedora-nova}"
+if [[ ${FEDORA_NOVA_APP_DIR+x} ]]; then
+  NOVA_APP_DIR="$FEDORA_NOVA_APP_DIR"
+else
+  # Resolve the sourced file itself, including file and directory symlinks.
+  # Temporary variables stay inside the command substitution.
+  if ! NOVA_APP_DIR="$(
+    nova_lib_path="$(realpath -e -- "${BASH_SOURCE[0]}")" || exit 1
+    nova_scripts_path="${nova_lib_path%/*}"
+    nova_core_path="${nova_scripts_path%/*}"
+    [[ "$nova_core_path" == /* && "$nova_core_path" != / && -d "$nova_core_path" ]] || exit 1
+    printf '%s\n' "$nova_core_path"
+  )"; then
+    printf 'ERROR: Nelze určit fyzický root core z načteného scripts/lib.sh.\n' >&2
+    exit 1
+  fi
+fi
 NOVA_CONFIG_DIR="$NOVA_CONFIG_HOME/fedora-nova"
 NOVA_STATE_DIR="$NOVA_STATE_HOME/fedora-nova"
 NOVA_CUSTOM_DIR="$NOVA_CONFIG_DIR/custom-profiles"
@@ -19,6 +34,32 @@ NOVA_SESSION_AUTOSTART="$NOVA_AUTOSTART_DIR/fedora-nova-session.desktop"
 log()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWARN:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
+
+package_layout_present() {
+  local root
+  [[ -n "${1:-}" ]] || return 1
+  root="$(realpath -m -- "$1")" || return 1
+  [[ -f "$root/core/nova" && -d "$root/fedora_nova" ]]
+}
+
+require_legacy_layout() {
+  local project destination parent root
+  [[ -n "${1:-}" && "${2:-}" == /* ]] ||
+    die "Neplatná cesta legacy instalace: zdroj a absolutní cíl jsou povinné."
+  project="$(realpath -e -- "$1")" || die "Nelze určit fyzickou cestu core: $1"
+  destination="$(realpath -m -- "$2")" || die "Nelze určit cílovou cestu: $2"
+  [[ "$project" != / && "$destination" != / ]] ||
+    die "Legacy instalace nesmí pracovat s kořenovým adresářem /."
+
+  # Check the source parent too: bundled core cannot manage a package install,
+  # even when XDG_DATA_HOME points to a different destination.
+  parent="$(dirname -- "$project")"
+  for root in "$destination" "$parent"; do
+    if package_layout_present "$root"; then
+      die "Detekována package instalace Fedora Nova v $root. Legacy core installer/uninstaller ji nespravuje a nesmí ji přepsat ani odstranit. Použij package/root instalační cestu."
+    fi
+  done
+}
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 

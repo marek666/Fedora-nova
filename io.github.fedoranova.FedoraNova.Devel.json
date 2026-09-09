@@ -23,6 +23,7 @@
                         ".git",
                         ".flatpak-builder",
                         ".flatpak-build-test",
+                        ".flatpak-build-legacy-settings",
                         ".dev-build",
                         "_build",
                         "build",
@@ -36,7 +37,8 @@
                 }
             ],
             "config-opts" : [
-                "--libdir=lib"
+                "--libdir=lib",
+                "-Dproduction_app=false"
             ]
         }
     ],

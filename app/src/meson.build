@@ -11,6 +11,24 @@ configure_file(
   install_dir: get_option('bindir'),
 )
 
+if get_option('production_app')
+  configure_file(
+    input: 'fedora-nova.in',
+    output: 'fedora-nova',
+    configuration: launcher_conf,
+    install: true,
+    install_dir: get_option('bindir'),
+    install_mode: 'rwxr-xr-x',
+  )
+  configure_file(
+    input: 'fedora-nova-settings.in',
+    output: 'fedora-nova-settings',
+    configuration: launcher_conf,
+    install: true,
+    install_dir: get_option('bindir'),
+  )
+endif
+
 install_subdir(
   'fedora_nova',
   install_dir: pkgdatadir,

@@ -9,7 +9,7 @@ Fedora Nova Control
 
 Usage: fedora-nova COMMAND [ARGS]
 
-  settings                             nativní GTK4/libadwaita nastavení
+  settings                             moderní GTK4/libadwaita nastavení
   control                              alias pro settings
   preset [full] [PROFILE] [--reload]    kompletní persistentní Nova desktop
   full-setup [PROFILE] [--reload]       alias pro preset full
@@ -28,6 +28,7 @@ Usage: fedora-nova COMMAND [ARGS]
   monitors {on|off|status|refresh}      horní panel na sekundárních monitorech
   session-restore {apply|enable|disable|status}
                                        znovu aplikuje Nova setup po přihlášení
+  migrate-installation [--dry-run]     bezpečně přepne legacy integraci na package runtime
   welcome {off|status}                 vypne uvítací GNOME/Fedora dialogy
   snapshot create [NAME]               pojmenovaný bod obnovy
   snapshot list|restore|delete ...     správa snapshotů
@@ -42,10 +43,33 @@ Usage: fedora-nova COMMAND [ARGS]
 USAGE
 }
 
+launch_settings() {
+  local launcher prefix
+  if [[ ${FEDORA_NOVA_SETTINGS_LAUNCHER+x} ]]; then
+    launcher="$FEDORA_NOVA_SETTINGS_LAUNCHER"
+    [[ -f "$launcher" && -x "$launcher" ]] ||
+      die "FEDORA_NOVA_SETTINGS_LAUNCHER není spustitelný soubor: $launcher"
+    [[ "$launcher" == /* ]] || launcher="./$launcher"
+    exec "$launcher" "$@"
+  fi
+
+  case "$ROOT" in
+    */share/fedora-nova/core) prefix="${ROOT%/share/fedora-nova/core}" ;;
+    */share/fedora-nova) prefix="${ROOT%/share/fedora-nova}" ;;
+    *)
+      die "Production Settings launcher není dostupný pro tento source/core-only runtime. Použij canonical package instalaci nebo explicitní FEDORA_NOVA_SETTINGS_LAUNCHER."
+      ;;
+  esac
+  launcher="$prefix/bin/fedora-nova-settings"
+  [[ -f "$launcher" && -x "$launcher" ]] ||
+    die "Production Settings launcher není dostupný: $launcher. Nainstaluj Fedora Nova canonical package/frontend."
+  exec "$launcher" "$@"
+}
+
 cmd="${1:-help}"
 shift || true
 case "$cmd" in
-  settings|control) "$ROOT/scripts/control.sh" "$@" ;;
+  settings|control) launch_settings "$@" ;;
   preset)
     if [[ $# -eq 0 ]]; then "$ROOT/scripts/apply-preset.sh" list
     else "$ROOT/scripts/apply-preset.sh" "$@"; fi ;;
@@ -75,6 +99,7 @@ case "$cmd" in
   session-restore)
     if [[ $# -eq 0 ]]; then "$ROOT/scripts/session-restore.sh" status
     else "$ROOT/scripts/session-restore.sh" "$@"; fi ;;
+  migrate-installation|migrate) "$ROOT/scripts/migrate-installation.sh" "$@" ;;
   welcome) "$ROOT/scripts/disable-welcome.sh" "${1:-status}" ;;
   snapshot) "$ROOT/scripts/snapshot.sh" "$@" ;;
   export) "$ROOT/scripts/export-config.sh" "${1:-}" ;;

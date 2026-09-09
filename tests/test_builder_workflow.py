@@ -1,6 +1,7 @@
 """Builder boundaries; backend calls never modify the host GNOME session."""
 import json
 import os
+import runpy
 from pathlib import Path
 import select
 import shutil
@@ -14,6 +15,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "app/src"))
 from fedora_nova import backend as backend_module
 
+DEVEL_ID = "io.github.fedoranova.FedoraNova.Devel"
+PRODUCTION_ID = "io.github.fedoranova.FedoraNova"
+
 
 class BackendBoundaries(unittest.TestCase):
     def setUp(self):
@@ -26,6 +30,29 @@ class BackendBoundaries(unittest.TestCase):
         }
         self.enterContext(patch.dict(os.environ, self.env, clear=True))
         self.enterContext(patch.object(backend_module, "CORE_ROOT", REPO / "core"))
+
+    def test_identity_defaults_and_explicit_native_host(self):
+        for requested, preview, allowed, expected in [
+            (None, None, None, DEVEL_ID),
+            (None, "0", "1", DEVEL_ID),
+            (DEVEL_ID, "0", "1", DEVEL_ID),
+            ("invalid.application", "0", "1", DEVEL_ID),
+            (PRODUCTION_ID, None, None, DEVEL_ID),
+            (PRODUCTION_ID, "0", None, DEVEL_ID),
+            (PRODUCTION_ID, "0", "0", DEVEL_ID),
+            (PRODUCTION_ID, "1", "1", DEVEL_ID),
+            (PRODUCTION_ID, "0", "1", PRODUCTION_ID),
+        ]:
+            with self.subTest(requested=requested, preview=preview, allowed=allowed):
+                env = dict(self.env)
+                for key, value in [("FEDORA_NOVA_APP_ID", requested),
+                                   ("FEDORA_NOVA_PREVIEW", preview),
+                                   ("FEDORA_NOVA_HOST_ALLOWED", allowed)]:
+                    if value is not None:
+                        env[key] = value
+                with patch.dict(os.environ, env, clear=True):
+                    constants = runpy.run_path(str(REPO / "app/src/fedora_nova/constants.py"))
+                    self.assertEqual(constants["APP_ID"], expected)
 
     def test_native_host_needs_both_explicit_flags(self):
         for preview, allowed, expected in [
@@ -60,6 +87,9 @@ class BackendBoundaries(unittest.TestCase):
                 ), patch.object(backend_module.subprocess, "run") as run, patch.object(
                     backend_module.subprocess, "Popen"
                 ) as popen:
+                    os.environ["FEDORA_NOVA_APP_ID"] = PRODUCTION_ID
+                    constants = runpy.run_path(str(REPO / "app/src/fedora_nova/constants.py"))
+                    self.assertEqual(constants["APP_ID"], DEVEL_ID)
                     backend = backend_module.Backend()
                     self.assertEqual(backend.runtime_mode, "preview")
                     self.assertFalse(backend.host_allowed)
@@ -112,21 +142,186 @@ class BackendBoundaries(unittest.TestCase):
             which.assert_not_called()
 
 
+class InstalledLaunchers(unittest.TestCase):
+    def test_installed_launchers_override_stale_environment(self):
+        # Execute configured templates against an installed-layout fixture. Only
+        # the UI entrypoint is replaced; constants and Backend are real modules.
+        with tempfile.TemporaryDirectory(prefix="nova-installed-") as tmp:
+            root = Path(tmp)
+            pkg = root / "installed share" / "fedora-nova"
+            shutil.copytree(REPO / "app/src/fedora_nova", pkg / "fedora_nova",
+                            ignore=shutil.ignore_patterns("__pycache__"))
+            core = pkg / "core"
+            core.mkdir()
+            (core / "nova").write_text("#!/bin/sh\nexit 99\n")
+            (core / "nova").chmod(0o755)
+            stale = root / "stale-bin"
+            stale.mkdir()
+            for name in ["fedora-nova", "fedora-nova-shell-preview"]:
+                (stale / name).write_text("#!/bin/sh\nexit 99\n")
+                (stale / name).chmod(0o755)
+            # A leftover helper next to installed core must also be ignored.
+            shutil.copy2(stale / "fedora-nova-shell-preview", pkg / "dev-shell-preview.sh")
+            (pkg / "fedora_nova/application.py").write_text('''
+import json, os
+from pathlib import Path
+from unittest.mock import patch
+
+def main():
+    exists = Path.exists
+    with patch.object(Path, "exists", lambda p: (
+        str(p) == "/.flatpak-info" and os.environ["NOVA_TEST_FLATPAK"] == "1"
+    ) or (str(p) != "/.flatpak-info" and exists(p))):
+        from .constants import APP_ID, PROJECT_ROOT, CORE_ROOT
+        from .backend import Backend
+        backend = Backend()
+        with patch("subprocess.run") as run, patch("subprocess.Popen") as popen:
+            helper = backend._shell_preview_helper()
+            if backend.in_flatpak:
+                assert not backend._host_spawn(["/usr/bin/true"]).ok
+                assert not backend._run_native("status").ok
+                assert not backend.set_runtime_mode("host").ok
+            run.assert_not_called()
+            popen.assert_not_called()
+        print(json.dumps(dict(
+            app_id=APP_ID, project=str(PROJECT_ROOT), core=str(CORE_ROOT),
+            cli=str(backend.cli), mode=backend.runtime_mode,
+            allowed=backend.host_allowed, can_host=backend.can_host,
+            helper=helper, env={k: v for k, v in os.environ.items()
+                               if k.startswith("FEDORA_NOVA_")},
+        )))
+    return 0
+''')
+            for command, identity, preview, allowed in [
+                ("fedora-nova-settings", PRODUCTION_ID, "0", "1"),
+                ("fedora-nova-settings-devel", DEVEL_ID, "1", "0"),
+            ]:
+                launcher = root / command
+                template = (REPO / "app/src" / (command + ".in")).read_text()
+                launcher.write_text(template.replace("@PYTHON@", sys.executable)
+                                    .replace("@PKGDATADIR@", str(pkg)))
+                for flatpak in [False, True]:
+                    with self.subTest(command=command, flatpak=flatpak):
+                        env = {
+                            "HOME": str(root), "XDG_CONFIG_HOME": str(root / "config"),
+                            "PATH": str(stale) + ":/usr/bin:/bin",
+                            "FEDORA_NOVA_PROJECT_ROOT": "/stale/worktree",
+                            "FEDORA_NOVA_CORE": "/stale/worktree/core",
+                            "FEDORA_NOVA_APP_DIR": "/stale/worktree/core",
+                            "FEDORA_NOVA_CLI": str(stale / "fedora-nova"),
+                            "FEDORA_NOVA_SHELL_PREVIEW": str(stale / "fedora-nova-shell-preview"),
+                            "FEDORA_NOVA_DEV_NON_UNIQUE": "1",
+                            "FEDORA_NOVA_APP_ID": DEVEL_ID if identity == PRODUCTION_ID else PRODUCTION_ID,
+                            "FEDORA_NOVA_PREVIEW": "1" if preview == "0" else "0",
+                            "FEDORA_NOVA_HOST_ALLOWED": "0" if allowed == "1" else "1",
+                            "NOVA_TEST_FLATPAK": "1" if flatpak else "0",
+                        }
+                        result = subprocess.run([sys.executable, str(launcher)], env=env,
+                                                capture_output=True, text=True, check=True)
+                        data = json.loads(result.stdout)
+                        host = identity == PRODUCTION_ID and not flatpak
+                        self.assertEqual(data["app_id"], DEVEL_ID if flatpak else identity)
+                        self.assertEqual(data["mode"], "host" if host else "preview")
+                        self.assertEqual(data["allowed"], host)
+                        self.assertEqual(data["can_host"], host)
+                        self.assertEqual(data["project"], str(pkg))
+                        self.assertEqual(data["core"], str(core))
+                        self.assertEqual(data["cli"], str(core / "nova"))
+                        self.assertEqual(data["env"]["FEDORA_NOVA_APP_DIR"], str(core))
+                        self.assertEqual(data["env"]["FEDORA_NOVA_APP_ID"], identity)
+                        self.assertEqual(data["env"]["FEDORA_NOVA_PREVIEW"], preview)
+                        self.assertEqual(data["env"]["FEDORA_NOVA_HOST_ALLOWED"], allowed)
+                        self.assertNotIn("FEDORA_NOVA_DEV_NON_UNIQUE", data["env"])
+                        self.assertIsNone(data["helper"])
+
+    def test_desktop_identities_and_flatpak_entrypoint(self):
+        import configparser
+        import xml.etree.ElementTree as ET
+
+        for identity, command in [(PRODUCTION_ID, "fedora-nova-settings"),
+                                  (DEVEL_ID, "fedora-nova-settings-devel")]:
+            with self.subTest(identity=identity):
+                desktop = configparser.ConfigParser(interpolation=None)
+                desktop.read(REPO / "app/data" / (identity + ".desktop.in"))
+                self.assertEqual(desktop["Desktop Entry"]["Exec"], command)
+                self.assertEqual(desktop["Desktop Entry"]["Icon"], identity)
+                ET.parse(REPO / "app/data" / (identity + ".svg"))
+        manifest = json.loads((REPO / (DEVEL_ID + ".json")).read_text())
+        self.assertEqual(manifest["app-id"], DEVEL_ID)
+        self.assertEqual(manifest["command"], "fedora-nova-settings-devel")
+        module = next(m for m in manifest["modules"] if m["name"] == "fedora-nova")
+        self.assertIn("-Dproduction_app=false", module["config-opts"])
+        self.assertIn("--env=FEDORA_NOVA_PREVIEW=1", manifest["finish-args"])
+        self.assertNotIn("--talk-name=org.freedesktop.Flatpak", manifest["finish-args"])
+
+
+    @unittest.skipUnless(shutil.which("meson"), "Meson is required for packaging tests")
+    def test_meson_production_packaging_boundary(self):
+        with tempfile.TemporaryDirectory(prefix="nova-packaging-") as tmp:
+            for production in [True, False]:
+                with self.subTest(production=production):
+                    build = Path(tmp) / ("production" if production else "devel")
+                    stage = build / "staging"
+                    setup = ["meson", "setup", str(build), str(REPO), "--prefix=/app"]
+                    # The default must include production; Flatpak opts out.
+                    if not production:
+                        setup.append("-Dproduction_app=false")
+                    for command in [setup, ["meson", "compile", "-C", str(build)],
+                                    ["meson", "install", "-C", str(build),
+                                     "--destdir", str(stage)]]:
+                        result = subprocess.run(command, capture_output=True, text=True)
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    for identity, launcher, expected in [
+                        (DEVEL_ID, "fedora-nova-settings-devel", True),
+                        (PRODUCTION_ID, "fedora-nova-settings", production),
+                    ]:
+                        for relative in [
+                            "bin/" + launcher,
+                            "share/applications/" + identity + ".desktop",
+                            "share/icons/hicolor/scalable/apps/" + identity + ".svg",
+                            "share/glib-2.0/schemas/" + identity + ".gschema.xml",
+                        ]:
+                            path = stage / "app" / relative
+                            self.assertEqual(path.is_file(), expected, str(path))
+                        if expected:
+                            self.assertTrue(os.access(stage / "app/bin" / launcher, os.X_OK))
+
+
 # Executed in place of the launcher's final python3 invocation. It imports the
 # actual application, suppresses only display styling, and registers it on the
 # private test bus. No window is created and no runtime CLI is executed.
 APPLICATION_PROBE = '''#!/usr/bin/python3
 import json, os
 from unittest.mock import patch
-from gi.repository import GLib
+from gi.repository import Gio, GLib
 from fedora_nova.application import NovaApplication
 from fedora_nova.backend import Backend
-from fedora_nova.constants import PROJECT_ROOT, CORE_ROOT
+from fedora_nova.constants import PROJECT_ROOT, CORE_ROOT, DEVEL_APP_ID, PRODUCTION_APP_ID
+from fedora_nova.state import WindowState
 with patch.object(NovaApplication, "_configure_style"), patch.object(NovaApplication, "_load_css"):
     app = NovaApplication()
 app.register(None)
 backend = Backend()
+window_state = WindowState()
+schemas = {}
+for identity in [DEVEL_APP_ID, PRODUCTION_APP_ID]:
+    schema = Gio.SettingsSchemaSource.get_default().lookup(identity, True)
+    schemas[identity] = dict(path=schema.get_path(), keys={
+        key: [schema.get_key(key).get_value_type().dup_string(),
+              schema.get_key(key).get_default_value().unpack()]
+        for key in schema.list_keys()
+    })
+# Use the fixture's memory backend to verify the two schema paths are independent.
+devel_state = Gio.Settings.new(DEVEL_APP_ID)
+host_state = Gio.Settings.new(PRODUCTION_APP_ID)
+devel_state.set_int("window-width", 480)
+host_state.set_int("window-width", 1200)
+assert devel_state.get_int("window-width") == 480
+assert host_state.get_int("window-width") == 1200
 print(json.dumps(dict(remote=app.get_is_remote(), flags=int(app.get_flags()),
+    app_id=app.get_application_id(), requested_id=os.environ.get("FEDORA_NOVA_APP_ID"),
+    schema_id=window_state.settings.props.schema_id,
+    schema_path=window_state.settings.props.path, schemas=schemas,
     mode=backend.runtime_mode, allowed=backend.host_allowed, can_host=backend.can_host,
     project=str(PROJECT_ROOT), core=str(CORE_ROOT), cli=str(backend.cli),
     config=str(backend.nova_config),
@@ -245,10 +440,12 @@ print(json.dumps(dict(config=str(backend.nova_config), before=before,
                        FEDORA_NOVA_CLI=str(Path.home() / ".local/bin/fedora-nova"),
                        FEDORA_NOVA_APP_DIR=str(Path.home() / ".local/share/fedora-nova"),
                        FEDORA_NOVA_HOST_ALLOWED="1",
+                       FEDORA_NOVA_APP_ID="stale.application.Identity",
                        FEDORA_NOVA_SHELL_PREVIEW="/stale/dev-shell-preview.sh")
             processes = []
             try:
                 for mode in ["preview", "host"]:
+                    env["FEDORA_NOVA_APP_ID"] = PRODUCTION_ID if mode == "preview" else DEVEL_ID
                     process = subprocess.Popen([str(REPO / "dev-run.sh"), mode], env=env,
                                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                                stderr=subprocess.PIPE, text=True)
@@ -260,6 +457,21 @@ print(json.dumps(dict(config=str(backend.nova_config), before=before,
                     result = json.loads(line)
                     self.assertFalse(result["remote"])
                     self.assertEqual(result["mode"], mode)
+                    expected_id = DEVEL_ID if mode == "preview" else PRODUCTION_ID
+                    self.assertEqual(result["app_id"], expected_id)
+                    self.assertEqual(result["requested_id"], expected_id)
+                    self.assertEqual(result["schema_id"], expected_id)
+                    schema_path = "/io/github/fedoranova/FedoraNova/"
+                    if mode == "preview":
+                        schema_path += "Devel/"
+                    self.assertEqual(result["schema_path"], schema_path)
+                    schemas = result["schemas"]
+                    self.assertEqual(schemas[DEVEL_ID]["path"], "/io/github/fedoranova/FedoraNova/Devel/")
+                    self.assertEqual(schemas[PRODUCTION_ID]["path"], "/io/github/fedoranova/FedoraNova/")
+                    self.assertEqual(schemas[PRODUCTION_ID]["keys"], schemas[DEVEL_ID]["keys"])
+                    self.assertEqual(set(schemas[PRODUCTION_ID]["keys"]), {
+                        "window-width", "window-height", "window-maximized", "last-page",
+                    })
                     expected_config = (REPO / ".dev-build/preview-config/fedora-nova"
                                        if mode == "preview" else root / "config/fedora-nova")
                     self.assertEqual(result["config"], str(expected_config))
