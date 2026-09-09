@@ -10,6 +10,8 @@ case "$MODE" in
     ;;
   preview)
     export FEDORA_NOVA_PREVIEW=1
+    export XDG_CONFIG_HOME="$ROOT/.dev-build/preview-config"
+    unset FEDORA_NOVA_HOST_ALLOWED
     ;;
   *)
     echo "Použij: ./dev-run.sh [preview|host]" >&2
@@ -18,9 +20,13 @@ case "$MODE" in
     ;;
 esac
 
-export PYTHONPATH="$ROOT/app/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$ROOT/app/src"
 export FEDORA_NOVA_PROJECT_ROOT="$ROOT"
 export FEDORA_NOVA_CORE="$ROOT/core"
+export FEDORA_NOVA_CLI="$ROOT/core/nova"
+export FEDORA_NOVA_APP_DIR="$ROOT/core"
+export FEDORA_NOVA_SHELL_PREVIEW="$ROOT/dev-shell-preview.sh"
+export FEDORA_NOVA_DEV_NON_UNIQUE=1
 
 SCHEMA_DIR="$ROOT/.dev-build/schemas"
 mkdir -p "$SCHEMA_DIR"

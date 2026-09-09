@@ -25,7 +25,12 @@ class NovaApplication(Adw.Application):
     def __init__(self) -> None:
         super().__init__(
             application_id=APP_ID,
-            flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
+            flags=(
+                Gio.ApplicationFlags.NON_UNIQUE
+                if os.environ.get("FEDORA_NOVA_DEV_NON_UNIQUE") == "1"
+                and not os.path.exists("/.flatpak-info")
+                else Gio.ApplicationFlags.DEFAULT_FLAGS
+            ),
         )
         self.window: NovaWindow | None = None
         self._install_actions()

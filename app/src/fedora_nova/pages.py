@@ -494,8 +494,15 @@ class Pages:
         if not shell_preview_ready:
             shell_group.add(
                 Adw.ActionRow(
-                    title="Host helper není připravený",
-                    subtitle="V kořeni projektu spusť ./dev-setup-fedora.sh",
+                    title=(
+                        "Shell Preview vyžaduje nativní spuštění"
+                        if self.backend.in_flatpak else "Host helper není připravený"
+                    ),
+                    subtitle=(
+                        "Spusť ./dev-shell-preview.sh z aktuálního checkoutu."
+                        if self.backend.in_flatpak
+                        else "V kořeni projektu spusť ./dev-setup-fedora.sh"
+                    ),
                 )
             )
 

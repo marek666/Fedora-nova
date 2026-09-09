@@ -9,8 +9,7 @@
         "--socket=wayland",
         "--socket=fallback-x11",
         "--device=dri",
-        "--env=FEDORA_NOVA_PREVIEW=1",
-        "--talk-name=org.freedesktop.Flatpak"
+        "--env=FEDORA_NOVA_PREVIEW=1"
     ],
     "modules" : [
         {

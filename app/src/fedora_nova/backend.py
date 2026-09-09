@@ -55,16 +55,12 @@ class Backend:
 
         self.in_flatpak = Path("/.flatpak-info").exists()
         preview_setting = os.environ.get("FEDORA_NOVA_PREVIEW")
-        forced_preview = preview_setting == "1"
-        forced_host = preview_setting == "0"
         self.host_allowed = (
-            forced_host or os.environ.get("FEDORA_NOVA_HOST_ALLOWED") == "1"
+            not self.in_flatpak
+            and preview_setting == "0"
+            and os.environ.get("FEDORA_NOVA_HOST_ALLOWED") == "1"
         )
-        self.runtime_mode = (
-            "preview"
-            if (forced_preview or not self.host_allowed or self.in_flatpak)
-            else "host"
-        )
+        self.runtime_mode = "host" if self.host_allowed else "preview"
         self.core_root = CORE_ROOT
         self.cli = self._resolve_cli()
 
@@ -93,31 +89,28 @@ class Backend:
 
     @property
     def can_host(self) -> bool:
-        if not self.host_allowed:
-            return False
-        if not self.in_flatpak:
-            return self.cli is not None
-        return shutil.which("flatpak-spawn") is not None
+        return not self.in_flatpak and self.host_allowed and self.cli is not None
 
     def shell_preview_available(self) -> bool:
-        if self.in_flatpak:
-            result = self._host_shell(
-                'test -x "$HOME/.local/bin/fedora-nova-shell-preview"'
-            )
-            return result.ok
-
-        return (
-            shutil.which("fedora-nova-shell-preview") is not None
-            or (self.core_root.parent / "dev-shell-preview.sh").is_file()
-        )
+        return self._shell_preview_helper() is not None
 
     def _shell_preview_helper(self) -> str | None:
-        helper = shutil.which("fedora-nova-shell-preview")
-        if helper is None:
-            candidate = self.core_root.parent / "dev-shell-preview.sh"
-            if candidate.is_file():
-                helper = str(candidate)
-        return helper
+        if self.in_flatpak:
+            return None
+
+        explicit = os.environ.get("FEDORA_NOVA_SHELL_PREVIEW")
+        if explicit:
+            candidate = Path(explicit)
+            # An invalid explicit helper must not fall back to another worktree.
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+            return None
+
+        candidate = self.core_root.parent / "dev-shell-preview.sh"
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+
+        return shutil.which("fedora-nova-shell-preview")
 
     @staticmethod
     def _preview_supervisor_matches(pid: int, token: str) -> bool:
@@ -150,21 +143,7 @@ class Backend:
 
     def shell_preview_running(self) -> bool:
         if self.in_flatpak:
-            result = self._host_shell(
-                'runtime="${XDG_CACHE_HOME:-$HOME/.cache}/fedora-nova-shell-preview/runtime"; '
-                'pidfile="$runtime/supervisor.pid"; tokenfile="$runtime/preview.token"; '
-                '[ -s "$pidfile" ] && [ -s "$tokenfile" ] || exit 1; '
-                'pid="$(cat "$pidfile")"; token="$(cat "$tokenfile")"; '
-                'case "$pid" in ""|*[!0-9]*) exit 1;; esac; '
-                'case "$token" in ""|*[!0-9a-fA-F]*) exit 1;; esac; '
-                '[ "${#token}" -eq 32 ] || exit 1; '
-                'kill -0 "$pid" 2>/dev/null || exit 1; '
-                'tr "\\0" "\\n" < "/proc/$pid/cmdline" 2>/dev/null | '
-                'grep -Eq "(^|/)(dev-shell-preview\\.sh|fedora-nova-shell-preview)$" || exit 1; '
-                'tr "\\0" "\\n" < "/proc/$pid/environ" 2>/dev/null | '
-                'grep -Fxq "NOVA_PREVIEW_TOKEN=$token"'
-            )
-            return result.ok
+            return False
 
         runtime = (
             Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
@@ -188,18 +167,8 @@ class Backend:
             )
 
         if self.in_flatpak:
-            return self._host_shell(
-                'preview="$HOME/.local/bin/fedora-nova-shell-preview"; '
-                '[ -x "$preview" ] || { '
-                'echo "Host helper chybí. Spusť z projektu ./dev-setup-fedora.sh" >&2; '
-                'exit 127; }; '
-                'if [ "$2" = "1" ]; then set -- --watch "$1"; '
-                'else set -- "$1"; fi; '
-                'nohup "$preview" "$@" '
-                '> "${XDG_CACHE_HOME:-$HOME/.cache}/fedora-nova-shell-preview-launch.log" '
-                '2>&1 < /dev/null &',
-                profile,
-                "1" if watch else "0",
+            return CommandResult(
+                126, stderr="Shell Preview je dostupný pouze v native development režimu."
             )
 
         helper = self._shell_preview_helper()
@@ -227,12 +196,8 @@ class Backend:
 
     def stop_shell_preview(self) -> CommandResult:
         if self.in_flatpak:
-            return self._host_shell(
-                'preview="$HOME/.local/bin/fedora-nova-shell-preview"; '
-                '[ -x "$preview" ] || { '
-                'echo "Host helper chybí. Spusť z projektu ./dev-setup-fedora.sh" >&2; '
-                'exit 127; }; '
-                'exec "$preview" --stop'
+            return CommandResult(
+                126, stderr="Shell Preview je dostupný pouze v native development režimu."
             )
 
         helper = self._shell_preview_helper()
@@ -260,29 +225,19 @@ class Backend:
             return CommandResult(
                 127,
                 stderr=(
-                    "System Host není dostupný. Ve Flatpaku chybí flatpak-spawn "
-                    "nebo na hostiteli není Fedora Nova CLI."
+                    "System Host vyžaduje nativní spuštění s FEDORA_NOVA_PREVIEW=0, "
+                    "FEDORA_NOVA_HOST_ALLOWED=1 a dostupné Fedora Nova CLI."
                 ),
             )
         self.runtime_mode = mode
         return CommandResult(0, stdout=self.mode_label)
 
     def _host_spawn(self, argv: list[str]) -> CommandResult:
-        if not self.in_flatpak:
-            try:
-                proc = subprocess.run(
-                    argv,
-                    text=True,
-                    capture_output=True,
-                    check=False,
-                )
-            except OSError as exc:
-                return CommandResult(126, stderr=str(exc))
-            return CommandResult(proc.returncode, proc.stdout, proc.stderr)
-
+        if self.in_flatpak:
+            return CommandResult(126, stderr="Host příkazy jsou ve Flatpak Preview zakázané.")
         try:
             proc = subprocess.run(
-                ["flatpak-spawn", "--host", *argv],
+                argv,
                 text=True,
                 capture_output=True,
                 check=False,
@@ -442,6 +397,8 @@ class Backend:
         return self._run_native(*args)
 
     def _run_native(self, *args: str) -> CommandResult:
+        if self.in_flatpak:
+            return CommandResult(126, stderr="Host příkazy jsou ve Flatpak Preview zakázané.")
         if self.cli is None:
             return CommandResult(
                 127,
