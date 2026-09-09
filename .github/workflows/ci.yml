@@ -21,22 +21,8 @@ jobs:
       - name: Static checks
         run: ./check.sh
 
-      - name: Standalone integration regressions
-        run: |
-          python3 -m unittest -v \
-            tests.test_legacy_integration_ownership \
-            tests.test_install_migration \
-            tests.test_install_layout_guard \
-            tests.test_asset_install_boundaries
-
-      - name: CLI compatibility regressions
-        run: |
-          python3 -m unittest -v \
-            tests.test_settings_routing \
-            tests.test_legacy_frontend_retirement \
-            tests.test_package_cli \
-            tests.test_cli_surface_cleanup \
-            tests.test_forge_profile
+      - name: Regression suite
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Configure
         run: meson setup _build --prefix=/usr
