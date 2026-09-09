@@ -1,0 +1,6 @@
+#!/bin/sh
+# Bind the package CLI to its own bundled core, ignoring inherited paths.
+export FEDORA_NOVA_APP_DIR='@PKGDATADIR@/core'
+export FEDORA_NOVA_CORE="$FEDORA_NOVA_APP_DIR"
+export FEDORA_NOVA_CLI="$FEDORA_NOVA_APP_DIR/nova"
+exec "$FEDORA_NOVA_CLI" "$@"
