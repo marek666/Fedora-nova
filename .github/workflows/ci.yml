@@ -50,3 +50,18 @@ jobs:
             find _staging -type d -name 'themes-src' -print >&2
             exit 1
           fi
+
+          core_root="_staging/usr/share/fedora-nova/core"
+          for forbidden in install.sh uninstall.sh scripts/install-assets.sh; do
+            if [[ -e "$core_root/$forbidden" ]]; then
+              echo "Legacy standalone installer leaked into package runtime: $forbidden" >&2
+              exit 1
+            fi
+          done
+
+          for required in nova scripts/install-user-assets.sh scripts/migrate-installation.sh; do
+            if [[ ! -e "$core_root/$required" ]]; then
+              echo "Required canonical runtime file missing from staging: $required" >&2
+              exit 1
+            fi
+          done
