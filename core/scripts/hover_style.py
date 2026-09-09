@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from theme_runtime import edit_theme_css
+
 BEGIN = '/* NOVA_HOVER_START */'
 END = '/* NOVA_HOVER_END */'
 PSEUDOS = (':hover', ':focus', ':selected', ':active', ':checked', ':outlined')
@@ -423,17 +425,16 @@ def main() -> int:
             palette = colors.get(css.parent.parent.name)
             if not palette:
                 continue
-            text = css.read_text(encoding='utf-8')
-            updated = strip_block(text) + '\n\n' + render(
+            block = render(
                 args.mode,
                 palette['accent'],
                 palette['secondary'],
                 palette['dock'],
                 palette['border'],
-            ) + '\n'
-            if updated != text:
-                css.write_text(updated, encoding='utf-8')
-                changed += 1
+            )
+            changed += int(edit_theme_css(
+                css, lambda text: strip_block(text) + '\n\n' + block + '\n'
+            ))
 
     print(f'{changed}\t{total}')
     return 0

@@ -28,18 +28,21 @@ CONFIG="$NOVA_APP_DIR/config/curves.json"
 python3 "$SCRIPT_DIR/curve_style.py" render "$PRESET" "$CONFIG" >/dev/null ||
   die "Neznámý curvature preset: $PRESET"
 
+python3 "$SCRIPT_DIR/theme_runtime.py" "$NOVA_APP_DIR/themes" "$NOVA_THEMES_DIR" \
+  "$NOVA_APP_DIR/config/profiles.json" "$PROJECT_DIR/themes"
+
+RESULT="$(
+  python3 "$SCRIPT_DIR/curve_style.py" apply "$PRESET" "$CONFIG" \
+    "$NOVA_THEMES_DIR"
+)"
+CHANGED="${RESULT%%$'\t'*}"
+TOTAL="${RESULT##*$'\t'}"
+
 mkdir -p "$NOVA_CONFIG_DIR"
 CURRENT="$(current_curve)"
 if [[ "$CURRENT" != "$PRESET" ]]; then
   printf '%s\n' "$CURRENT" > "$NOVA_CONFIG_DIR/previous-curve"
 fi
-
-RESULT="$(
-  python3 "$SCRIPT_DIR/curve_style.py" apply "$PRESET" "$CONFIG" \
-    "$PROJECT_DIR/themes" "$NOVA_APP_DIR/themes" "$NOVA_THEMES_DIR"
-)"
-CHANGED="${RESULT%%$'\t'*}"
-TOTAL="${RESULT##*$'\t'}"
 
 printf '%s\n' "$PRESET" > "$NOVA_CONFIG_DIR/current-curve"
 disable_extension blur-my-shell@aunetx

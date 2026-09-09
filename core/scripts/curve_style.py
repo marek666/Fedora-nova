@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from theme_runtime import edit_theme_css
+
 BEGIN = "/* NOVA_CURVE_START */"
 END = "/* NOVA_CURVE_END */"
 
@@ -163,15 +165,7 @@ def strip_existing(text: str) -> str:
 
 
 def update_file(file: Path, block: str) -> bool:
-    try:
-        text = file.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    updated = strip_existing(text) + "\n\n" + block + "\n"
-    if updated == text:
-        return False
-    file.write_text(updated, encoding="utf-8")
-    return True
+    return edit_theme_css(file, lambda text: strip_existing(text) + "\n\n" + block + "\n")
 
 
 def find_theme_files(roots: list[Path]) -> list[Path]:
