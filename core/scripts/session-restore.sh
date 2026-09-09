@@ -125,7 +125,7 @@ status_autostart() {
 }
 
 case "$ACTION" in
-  apply|restore)
+  apply)
     mkdir -p "$NOVA_STATE_DIR"
     if [[ $QUIET -eq 1 ]]; then
       restore_session >> "$NOVA_STATE_DIR/session-restore.log" 2>&1
@@ -133,8 +133,8 @@ case "$ACTION" in
       restore_session
     fi
     ;;
-  enable|on|autostart) enable_autostart ;;
-  disable|off) disable_autostart ;;
+  enable) enable_autostart ;;
+  disable) disable_autostart ;;
   status) status_autostart ;;
   *) die "Použij: $0 {apply|enable|disable|status} [--quiet]" ;;
 esac
