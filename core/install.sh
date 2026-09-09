@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname -- "$(realpath -e -- "${BASH_SOURCE[0]}")")"
 source "$PROJECT_DIR/scripts/lib.sh"
+
+APP_DEST="$NOVA_DATA_HOME/fedora-nova"
+require_legacy_layout "$PROJECT_DIR" "$APP_DEST"
 
 DRY_RUN=0
 SKIP_PACKAGES=0
@@ -72,9 +75,8 @@ if [[ $DRY_RUN -ne 1 && $NO_APPLY -ne 1 ]]; then
   "$PROJECT_DIR/scripts/backup-settings.sh" >/dev/null
 fi
 
-APP_DEST="${XDG_DATA_HOME:-$HOME/.local/share}/fedora-nova"
 log "Instaluji trvalou kopii do $APP_DEST"
-if [[ "$PROJECT_DIR" == "$APP_DEST" ]]; then
+if [[ "$PROJECT_DIR" == "$(realpath -m -- "$APP_DEST")" ]]; then
   log "Instalátor už běží z trvalé kopie; kopírování přeskakuji"
 elif [[ $DRY_RUN -eq 1 ]]; then
   printf '+ rm -rf %q\n' "$APP_DEST"

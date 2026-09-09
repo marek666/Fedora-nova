@@ -20,6 +20,32 @@ log()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWARN:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
+package_layout_present() {
+  local root
+  [[ -n "${1:-}" ]] || return 1
+  root="$(realpath -m -- "$1")" || return 1
+  [[ -f "$root/core/nova" && -d "$root/fedora_nova" ]]
+}
+
+require_legacy_layout() {
+  local project destination parent root
+  [[ -n "${1:-}" && "${2:-}" == /* ]] ||
+    die "Neplatná cesta legacy instalace: zdroj a absolutní cíl jsou povinné."
+  project="$(realpath -e -- "$1")" || die "Nelze určit fyzickou cestu core: $1"
+  destination="$(realpath -m -- "$2")" || die "Nelze určit cílovou cestu: $2"
+  [[ "$project" != / && "$destination" != / ]] ||
+    die "Legacy instalace nesmí pracovat s kořenovým adresářem /."
+
+  # Check the source parent too: bundled core cannot manage a package install,
+  # even when XDG_DATA_HOME points to a different destination.
+  parent="$(dirname -- "$project")"
+  for root in "$destination" "$parent"; do
+    if package_layout_present "$root"; then
+      die "Detekována package instalace Fedora Nova v $root. Legacy core installer/uninstaller ji nespravuje a nesmí ji přepsat ani odstranit. Použij package/root instalační cestu."
+    fi
+  done
+}
+
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 schema_exists() {

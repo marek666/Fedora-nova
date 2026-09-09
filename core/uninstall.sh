@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname -- "$(realpath -e -- "${BASH_SOURCE[0]}")")"
 source "$PROJECT_DIR/scripts/lib.sh"
+
+APP_DEST="$NOVA_DATA_HOME/fedora-nova"
+require_legacy_layout "$PROJECT_DIR" "$APP_DEST"
 
 RESTORE=0
 REMOVE_PACKAGES=0
@@ -68,8 +71,7 @@ rm -f \
   "$NOVA_DATA_HOME/applications/fedora-nova-control.desktop" \
   "$HOME/.local/bin/fedora-nova"
 
-APP_DEST="$NOVA_DATA_HOME/fedora-nova"
-if [[ "$PROJECT_DIR" != "$APP_DEST" ]]; then
+if [[ "$PROJECT_DIR" != "$(realpath -m -- "$APP_DEST")" ]]; then
   rm -rf "$APP_DEST"
 else
   (sleep 1; rm -rf "$APP_DEST") >/dev/null 2>&1 &
