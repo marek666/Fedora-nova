@@ -67,9 +67,25 @@ rm -f \
   "$NOVA_DATA_HOME/org.gnome.Ptyxis/palettes/Fedora Nova Glass Lite.palette" \
   "$NOVA_DATA_HOME/org.gnome.Ptyxis/palettes/Fedora Nova Pulse.palette" \
   "$NOVA_CONFIG_HOME/fastfetch/fedora-nova.jsonc" \
-  "$NOVA_DATA_HOME/icons/hicolor/scalable/apps/fedora-nova.svg" \
-  "$NOVA_DATA_HOME/applications/fedora-nova-control.desktop" \
-  "$HOME/.local/bin/fedora-nova"
+  "$NOVA_DATA_HOME/icons/hicolor/scalable/apps/fedora-nova.svg"
+
+LEGACY_DESKTOP="$NOVA_DATA_HOME/applications/fedora-nova-control.desktop"
+if [[ -e "$LEGACY_DESKTOP" || -L "$LEGACY_DESKTOP" ]]; then
+  if is_managed_legacy_settings_desktop "$LEGACY_DESKTOP"; then
+    rm -f -- "$LEGACY_DESKTOP"
+  else
+    warn "Zachovávám $LEGACY_DESKTOP: není to rozpoznaná legacy Fedora Nova desktop položka."
+  fi
+fi
+
+LEGACY_WRAPPER="$HOME/.local/bin/fedora-nova"
+if [[ -e "$LEGACY_WRAPPER" || -L "$LEGACY_WRAPPER" ]]; then
+  if is_managed_legacy_cli_wrapper "$LEGACY_WRAPPER"; then
+    rm -f -- "$LEGACY_WRAPPER"
+  else
+    warn "Zachovávám $LEGACY_WRAPPER: není to rozpoznaný Fedora Nova legacy standalone wrapper."
+  fi
+fi
 
 if [[ "$PROJECT_DIR" != "$(realpath -m -- "$APP_DEST")" ]]; then
   rm -rf "$APP_DEST"
