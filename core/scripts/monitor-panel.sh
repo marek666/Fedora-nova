@@ -106,8 +106,8 @@ status_panel() {
 case "${1:-status}" in
   install) install_extension ;;
   refresh) install_extension force ;;
-  on|enable) install_extension; enable_panel ;;
-  off|disable) disable_panel ;;
+  on) install_extension; enable_panel ;;
+  off) disable_panel ;;
   status) status_panel ;;
   *) die "Použij: monitor-panel.sh {install|refresh|on|off|status}" ;;
 esac
