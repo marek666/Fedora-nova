@@ -6,7 +6,22 @@ NOVA_VERSION="0.8.0-dev"
 NOVA_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 NOVA_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 NOVA_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
-NOVA_APP_DIR="${FEDORA_NOVA_APP_DIR:-$NOVA_DATA_HOME/fedora-nova}"
+if [[ ${FEDORA_NOVA_APP_DIR+x} ]]; then
+  NOVA_APP_DIR="$FEDORA_NOVA_APP_DIR"
+else
+  # Resolve the sourced file itself, including file and directory symlinks.
+  # Temporary variables stay inside the command substitution.
+  if ! NOVA_APP_DIR="$(
+    nova_lib_path="$(realpath -e -- "${BASH_SOURCE[0]}")" || exit 1
+    nova_scripts_path="${nova_lib_path%/*}"
+    nova_core_path="${nova_scripts_path%/*}"
+    [[ "$nova_core_path" == /* && "$nova_core_path" != / && -d "$nova_core_path" ]] || exit 1
+    printf '%s\n' "$nova_core_path"
+  )"; then
+    printf 'ERROR: Nelze určit fyzický root core z načteného scripts/lib.sh.\n' >&2
+    exit 1
+  fi
+fi
 NOVA_CONFIG_DIR="$NOVA_CONFIG_HOME/fedora-nova"
 NOVA_STATE_DIR="$NOVA_STATE_HOME/fedora-nova"
 NOVA_CUSTOM_DIR="$NOVA_CONFIG_DIR/custom-profiles"
