@@ -26,40 +26,46 @@ GNOME_ACCENTS = {
     "slate": "#6f8396",
 }
 
-TECH_TOKENS = {
-    "#07111f": "bg",
-    "#040a14": "panel",
-    "#091424": "large",
-    "#122640": "surface",
-    "#172e4b": "surface2",
-    "#1c2739": "card",
-    "#2ed8e8": "accent",
-    "#6fe7f7": "accent_bright",
-    "#06131a": "accent_fg",
-    "#8c5cff": "secondary",
-    "#eaf2ff": "text",
-    "#92a6bf": "muted",
-    "#31516d": "border",
-}
+COLOR_ROLES = (
+    "bg",
+    "panel",
+    "large",
+    "surface",
+    "surface2",
+    "card",
+    "accent",
+    "accent_bright",
+    "accent_fg",
+    "secondary",
+    "text",
+    "muted",
+    "border",
+    "shadow",
+)
+
 
 def normalize_hex(value: str) -> str:
     if not HEX_RE.fullmatch(value):
         raise ValueError(f"Neplatná HEX barva: {value}")
     return "#" + value.lstrip("#").upper()
 
+
 def rgb(value: str) -> tuple[int, int, int]:
     value = normalize_hex(value).lstrip("#")
     return tuple(int(value[i:i+2], 16) for i in (0, 2, 4))
 
+
 def hex_color(value) -> str:
     vals = [max(0, min(255, round(v))) for v in value]
     return "#" + "".join(f"{v:02X}" for v in vals)
+
 
 def mix(a: str, b: str, weight_b: float) -> str:
     ar, ag, ab = rgb(a)
     br, bg, bb = rgb(b)
     w = max(0.0, min(1.0, weight_b))
     return hex_color((ar*(1-w)+br*w, ag*(1-w)+bg*w, ab*(1-w)+bb*w))
+
 
 def rotate_hue(color: str, degrees: float) -> str:
     r, g, b = [v / 255 for v in rgb(color)]
@@ -68,23 +74,30 @@ def rotate_hue(color: str, degrees: float) -> str:
     rr, gg, bb = colorsys.hls_to_rgb(h, max(0.48, min(0.62, l)), max(0.72, s))
     return hex_color((rr*255, gg*255, bb*255))
 
+
 def srgb_to_linear(channel: float) -> float:
     channel /= 255.0
     return channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+
 
 def luminance(color: str) -> float:
     r, g, b = rgb(color)
     return 0.2126*srgb_to_linear(r) + 0.7152*srgb_to_linear(g) + 0.0722*srgb_to_linear(b)
 
+
 def accent_foreground(color: str) -> str:
     return "#071018" if luminance(color) > 0.29 else "#F8FBFF"
 
+
 def nearest_gnome_accent(color: str) -> str:
     cr, cg, cb = rgb(color)
+
     def distance(candidate: str) -> float:
         rr, gg, bb = rgb(candidate)
         return math.sqrt((cr-rr)**2 + (cg-gg)**2 + (cb-bb)**2)
+
     return min(GNOME_ACCENTS, key=lambda name: distance(GNOME_ACCENTS[name]))
+
 
 def slugify(name: str) -> str:
     slug = SLUG_RE.sub("-", name.lower()).strip("-")
@@ -92,8 +105,10 @@ def slugify(name: str) -> str:
         raise ValueError("Název nevytvořil platné ID.")
     return slug[:48]
 
+
 def title_from_name(name: str) -> str:
     return " ".join(part for part in re.split(r"\s+", name.strip()) if part)[:80]
+
 
 def palette(primary: str, secondary: str) -> dict[str, str]:
     return {
@@ -113,36 +128,83 @@ def palette(primary: str, secondary: str) -> dict[str, str]:
         "shadow": "#000000",
     }
 
-def replace_css(template: str, colors: dict[str, str], title: str) -> str:
-    css = template
-    css = re.sub(r"Fedora Nova 0\.\d+\.\d+", "Fedora Nova 0.6.0", css)
-    css = re.sub(r"Profile: Nova Tech", f"Profile: Nova Forge — {title}", css)
 
-    rgba_roles = {
-        (46, 216, 232): "accent",
-        (111, 231, 247): "accent_bright",
-        (6, 19, 26): "accent_fg",
-        (140, 92, 255): "secondary",
-        (234, 242, 255): "text",
-        (146, 166, 191): "muted",
-        (49, 81, 109): "border",
-    }
-    for old_rgb, role in rgba_roles.items():
+def template_colors(profiles_path: Path) -> dict[str, str]:
+    data = json.loads(profiles_path.read_text(encoding="utf-8"))
+    try:
+        tech = data["profiles"]["tech"]
+    except (KeyError, TypeError) as exc:
+        raise ValueError("profiles.json neobsahuje výchozí Tech profil pro Forge.") from exc
+
+    colors: dict[str, str] = {}
+    for role in COLOR_ROLES:
+        value = tech.get(role)
+        if not isinstance(value, str):
+            raise ValueError(f"Tech profil neobsahuje barvu {role} pro Forge.")
+        colors[role] = normalize_hex(value)
+    return colors
+
+
+def replace_css(
+    template: str,
+    colors: dict[str, str],
+    base_colors: dict[str, str],
+    title: str,
+) -> str:
+    css = re.sub(
+        r"Profile: Nova Tech[^\n]*",
+        f"Profile: Nova Forge — {title}",
+        template,
+        count=1,
+    )
+
+    # Derive replacement tokens from the current canonical Tech profile instead
+    # of carrying a second hard-coded color manifest that can drift from the
+    # compiled template. A single regex pass prevents replacement cascades when
+    # a generated color happens to equal another base token.
+    hex_roles: dict[str, str] = {}
+    rgb_roles: dict[tuple[int, int, int], str] = {}
+    for role in COLOR_ROLES:
+        old = normalize_hex(base_colors[role])
+        old_key = old.lower()
+        if old_key in hex_roles and hex_roles[old_key] != role:
+            raise ValueError(f"Tech profil sdílí nejednoznačnou Forge barvu: {old}")
+        hex_roles[old_key] = role
+        old_rgb = rgb(old)
+        if old_rgb in rgb_roles and rgb_roles[old_rgb] != role:
+            raise ValueError(f"Tech profil sdílí nejednoznačnou Forge RGB barvu: {old}")
+        rgb_roles[old_rgb] = role
+
+    rgba_pattern = re.compile(
+        r"rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,",
+        re.IGNORECASE,
+    )
+
+    def replace_rgba(match: re.Match[str]) -> str:
+        old_rgb = tuple(int(match.group(i)) for i in (1, 2, 3))
+        role = rgb_roles.get(old_rgb)
+        if role is None:
+            return match.group(0)
         nr, ng, nb = rgb(colors[role])
-        pattern = re.compile(
-            rf"rgba\(\s*{old_rgb[0]}\s*,\s*{old_rgb[1]}\s*,\s*{old_rgb[2]}\s*,",
-            re.IGNORECASE,
-        )
-        css = pattern.sub(f"rgba({nr}, {ng}, {nb},", css)
+        return f"rgba({nr}, {ng}, {nb},"
 
-    for old_hex, role in TECH_TOKENS.items():
-        css = re.sub(re.escape(old_hex), colors[role], css, flags=re.IGNORECASE)
+    css = rgba_pattern.sub(replace_rgba, css)
+
+    hex_pattern = re.compile(
+        "|".join(re.escape(token) for token in sorted(hex_roles, key=len, reverse=True)),
+        re.IGNORECASE,
+    )
+    css = hex_pattern.sub(
+        lambda match: colors[hex_roles[match.group(0).lower()]],
+        css,
+    )
 
     if re.search(r"(blur-effect|filter\s*:\s*blur)", css, re.IGNORECASE):
         raise ValueError("Generovaný theme neprošel výkonovou kontrolou blur.")
     if css.count("{") != css.count("}"):
         raise ValueError("Generovaný theme má nevyvážené CSS závorky.")
     return css
+
 
 def wallpaper_svg(primary: str, secondary: str, colors: dict[str, str], title: str) -> str:
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="1600" viewBox="0 0 2560 1600">
@@ -187,6 +249,7 @@ def wallpaper_svg(primary: str, secondary: str, colors: dict[str, str], title: s
   <metadata>Fedora Nova Forge profile: {title}</metadata>
 </svg>'''
 
+
 def ptyxis_palette(title: str, colors: dict[str, str]) -> str:
     return f'''[Palette]
 Name=Fedora Nova Custom {title}
@@ -214,6 +277,7 @@ Color14={colors["secondary"]}
 Color15=#FFFFFF
 '''
 
+
 def paths() -> dict[str, Path]:
     home = Path.home()
     data = Path(os.environ.get("XDG_DATA_HOME", home / ".local/share"))
@@ -228,6 +292,7 @@ def paths() -> dict[str, Path]:
         "state": config / "fedora-nova/current-profile",
     }
 
+
 def create(args: argparse.Namespace) -> int:
     title = title_from_name(args.name)
     slug = slugify(title)
@@ -241,10 +306,12 @@ def create(args: argparse.Namespace) -> int:
     wallpaper_name = f"custom-{slug}.svg"
     palette_name = f"Fedora Nova Custom {title}.palette"
 
+    profiles_path = loc["app"] / "config/profiles.json"
+    base_colors = template_colors(profiles_path)
     template = (loc["app"] / "themes/Fedora-Nova-Tech/gnome-shell/gnome-shell.css").read_text(
         encoding="utf-8"
     )
-    css = replace_css(template, colors, title)
+    css = replace_css(template, colors, base_colors, title)
 
     theme_dir = loc["themes"] / theme_name / "gnome-shell"
     for directory in (theme_dir, loc["wallpapers"], loc["palettes"], loc["custom"]):
@@ -279,6 +346,7 @@ def create(args: argparse.Namespace) -> int:
     print(profile_id)
     return 0
 
+
 def delete(args: argparse.Namespace) -> int:
     profile_id = args.profile
     if not profile_id.startswith("custom-"):
@@ -306,6 +374,7 @@ def delete(args: argparse.Namespace) -> int:
     metadata_file.unlink()
     print(profile_id)
     return 0
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Fedora Nova Forge")
@@ -335,6 +404,7 @@ def main() -> int:
     except (ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
