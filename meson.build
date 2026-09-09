@@ -35,7 +35,6 @@ install_subdir(
     'config/packages.txt',
     'scripts/install-assets.sh',
     'scripts/build-theme-sass.sh',
-    'scripts/check-compatibility.sh',
     'scripts/preview_reload.py',
     'scripts/theme_hot_reload.py',
   ],
