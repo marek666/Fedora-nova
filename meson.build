@@ -30,6 +30,9 @@ install_subdir(
   ],
   exclude_files: [
     'SHA256SUMS',
+    'install.sh',
+    'uninstall.sh',
+    'scripts/install-assets.sh',
     'scripts/build-theme-sass.sh',
     'scripts/preview_reload.py',
     'scripts/theme_hot_reload.py',
