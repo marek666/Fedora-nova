@@ -131,17 +131,22 @@ class PackageCLI(unittest.TestCase):
         self.assertEqual(json.loads(old.read_text()), stale)
         self.assertFalse((self.home / "config").exists())
 
-    def test_settings_and_control_select_same_prefix(self):
+    def test_settings_selects_same_prefix(self):
         settings = self.prefix / "bin/fedora-nova-settings"
         args = ["with spaces", "", "$HOME;*", "line\nbreak"]
-        with self.replace_file(settings, PROBE), self.replace_file(
-            self.core / "scripts/control.sh", "#!/bin/sh\nexit 98\n"
-        ):
-            for alias in ["settings", "control"]:
-                with self.subTest(alias=alias):
-                    result = json.loads(self.run_cli(alias, *args))
-                    self.assertEqual(result["file"], str(settings))
-                    self.assertEqual(result["args"], args)
+        with self.replace_file(settings, PROBE):
+            result = json.loads(self.run_cli("settings", *args))
+        self.assertEqual(result["file"], str(settings))
+        self.assertEqual(result["args"], args)
+
+    def test_control_alias_is_rejected(self):
+        settings = self.prefix / "bin/fedora-nova-settings"
+        with self.replace_file(settings, PROBE):
+            result = subprocess.run([str(self.cli), "control"], env=self.env, cwd=self.home,
+                                    capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Neznámý příkaz: control", result.stderr)
+        self.assertNotIn('"file":', result.stdout)
 
     def test_runtime_assets_and_preset_preserve_package_cli(self):
         # Reuse the isolated, tiny asset fixture and its fake host commands.
