@@ -111,7 +111,7 @@ case "$PRESET" in
   list)
     printf '%-12s %s\n' full 'kompletní persistentní Nova desktop'
     ;;
-  full|nova-full|mutter)
+  full)
     apply_full
     ;;
   -h|--help)
