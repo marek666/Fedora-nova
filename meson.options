@@ -1,0 +1,6 @@
+option(
+  'production_app',
+  type: 'boolean',
+  value: true,
+  description: 'Install the production Settings launcher and desktop identity',
+)

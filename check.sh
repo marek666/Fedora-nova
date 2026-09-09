@@ -4,7 +4,8 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 find "$ROOT" \
   \( -name .git -o -name _build -o -name .flatpak-builder \
-     -o -name .flatpak-build-test -o -name .dev-build \) -prune \
+     -o -name .flatpak-build-test -o -name .flatpak-build-legacy-settings \
+     -o -name .dev-build \) -prune \
   -o -name '*.sh' -type f -print0 |
   xargs -0 -r -n1 bash -n
 
@@ -48,6 +49,7 @@ import xml.etree.ElementTree as ET
 root = Path(sys.argv[1])
 skip_dirs = {
     ".git", "_build", ".flatpak-builder", ".flatpak-build-test",
+    ".flatpak-build-legacy-settings",
     ".dev-build", "generated",
 }
 

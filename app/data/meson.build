@@ -17,7 +17,6 @@ install_data(
 
 install_data(
   'io.github.fedoranova.FedoraNova.Devel.gschema.xml',
-  'io.github.fedoranova.FedoraNova.gschema.xml',
   install_dir: join_paths(get_option('datadir'), 'glib-2.0', 'schemas'),
 )
 
@@ -31,3 +30,26 @@ install_data(
     'apps',
   ),
 )
+
+if get_option('production_app')
+  production_desktop_file = configure_file(
+    input: 'io.github.fedoranova.FedoraNova.desktop.in',
+    output: 'io.github.fedoranova.FedoraNova.desktop',
+    copy: true,
+  )
+
+  install_data(
+    production_desktop_file,
+    install_dir: join_paths(get_option('datadir'), 'applications'),
+  )
+
+  install_data(
+    'io.github.fedoranova.FedoraNova.gschema.xml',
+    install_dir: join_paths(get_option('datadir'), 'glib-2.0', 'schemas'),
+  )
+
+  install_data(
+    'io.github.fedoranova.FedoraNova.svg',
+    install_dir: join_paths(get_option('datadir'), 'icons', 'hicolor', 'scalable', 'apps'),
+  )
+endif

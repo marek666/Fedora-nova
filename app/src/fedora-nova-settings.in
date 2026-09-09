@@ -10,9 +10,9 @@ os.environ["FEDORA_NOVA_PROJECT_ROOT"] = PKGDATADIR
 os.environ["FEDORA_NOVA_CORE"] = os.path.join(PKGDATADIR, "core")
 os.environ["FEDORA_NOVA_CLI"] = os.path.join(PKGDATADIR, "core", "nova")
 os.environ["FEDORA_NOVA_APP_DIR"] = os.path.join(PKGDATADIR, "core")
-os.environ["FEDORA_NOVA_APP_ID"] = "io.github.fedoranova.FedoraNova.Devel"
-os.environ["FEDORA_NOVA_PREVIEW"] = "1"
-os.environ["FEDORA_NOVA_HOST_ALLOWED"] = "0"
+os.environ["FEDORA_NOVA_APP_ID"] = "io.github.fedoranova.FedoraNova"
+os.environ["FEDORA_NOVA_PREVIEW"] = "0"
+os.environ["FEDORA_NOVA_HOST_ALLOWED"] = "1"
 # Installed applications use normal GApplication uniqueness and no dev helper.
 os.environ.pop("FEDORA_NOVA_DEV_NON_UNIQUE", None)
 os.environ["FEDORA_NOVA_SHELL_PREVIEW"] = ""
