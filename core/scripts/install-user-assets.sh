@@ -39,9 +39,9 @@ done
 cp -a "$PROJECT_DIR/assets/wallpapers/." "$WALL_DEST/"
 cp -a "$PROJECT_DIR/terminal/ptyxis/." "$PTYXIS_DEST/"
 cp -a "$PROJECT_DIR/terminal/fastfetch/fedora-nova.jsonc" "$FASTFETCH_DEST/"
-cp -a "$PROJECT_DIR/config/colors.json" "$NOVA_CONFIG_DIR/"
-cp -a "$PROJECT_DIR/config/profiles.json" "$NOVA_CONFIG_DIR/"
-cp -a "$PROJECT_DIR/config/curves.json" "$NOVA_CONFIG_DIR/"
+# profiles.json and curves.json are immutable bundled runtime configuration.
+# Do not shadow them under XDG_CONFIG_HOME where old copies can outlive an
+# upgrade. Existing legacy copies are intentionally left untouched.
 cp -a "$PROJECT_DIR/assets/icons/fedora-nova.svg" "$ICON_DEST/"
 "$SCRIPT_DIR/install-tela-icons.sh"
 "$SCRIPT_DIR/monitor-panel.sh" install
