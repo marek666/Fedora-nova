@@ -35,7 +35,8 @@ jobs:
             tests.test_settings_routing \
             tests.test_legacy_frontend_retirement \
             tests.test_package_cli \
-            tests.test_cli_surface_cleanup
+            tests.test_cli_surface_cleanup \
+            tests.test_forge_profile
 
       - name: Configure
         run: meson setup _build --prefix=/usr
