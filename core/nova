@@ -42,10 +42,34 @@ Usage: fedora-nova COMMAND [ARGS]
 USAGE
 }
 
+launch_settings() {
+  local launcher prefix
+  if [[ ${FEDORA_NOVA_SETTINGS_LAUNCHER+x} ]]; then
+    launcher="$FEDORA_NOVA_SETTINGS_LAUNCHER"
+    [[ -f "$launcher" && -x "$launcher" ]] ||
+      die "FEDORA_NOVA_SETTINGS_LAUNCHER není spustitelný soubor: $launcher"
+    # A relative filename is a path override, never a PATH lookup.
+    [[ "$launcher" == /* ]] || launcher="./$launcher"
+    exec "$launcher" "$@"
+  fi
+
+  # Only pair installed core with Settings from the same installation prefix.
+  case "$ROOT" in
+    */share/fedora-nova/core) prefix="${ROOT%/share/fedora-nova/core}" ;;
+    */share/fedora-nova) prefix="${ROOT%/share/fedora-nova}" ;;
+    *) exec "$ROOT/scripts/control.sh" "$@" ;;
+  esac
+  launcher="$prefix/bin/fedora-nova-settings"
+  if [[ -f "$launcher" && -x "$launcher" ]]; then
+    exec "$launcher" "$@"
+  fi
+  exec "$ROOT/scripts/control.sh" "$@"
+}
+
 cmd="${1:-help}"
 shift || true
 case "$cmd" in
-  settings|control) "$ROOT/scripts/control.sh" "$@" ;;
+  settings|control) launch_settings "$@" ;;
   preset)
     if [[ $# -eq 0 ]]; then "$ROOT/scripts/apply-preset.sh" list
     else "$ROOT/scripts/apply-preset.sh" "$@"; fi ;;
