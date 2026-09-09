@@ -63,16 +63,22 @@ jobs:
           for forbidden in \
             install.sh \
             uninstall.sh \
+            config/colors.json \
             config/packages.txt \
             scripts/install-assets.sh \
             scripts/check-compatibility.sh; do
             if [[ -e "$core_root/$forbidden" ]]; then
-              echo "Source-only compatibility file leaked into package runtime: $forbidden" >&2
+              echo "Source-only or stale file leaked into package runtime: $forbidden" >&2
               exit 1
             fi
           done
 
-          for required in nova scripts/install-user-assets.sh scripts/migrate-installation.sh; do
+          for required in \
+            nova \
+            config/profiles.json \
+            config/curves.json \
+            scripts/install-user-assets.sh \
+            scripts/migrate-installation.sh; do
             if [[ ! -e "$core_root/$required" ]]; then
               echo "Required canonical runtime file missing from staging: $required" >&2
               exit 1
