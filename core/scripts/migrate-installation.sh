@@ -45,24 +45,6 @@ same_file() {
   [[ "$(realpath -e -- "$1")" == "$(realpath -e -- "$2")" ]]
 }
 
-managed_legacy_wrapper() {
-  local first second third
-  [[ -f "$1" ]] || return 1
-  IFS= read -r first < "$1" || true
-  second="$(sed -n '2p' -- "$1")"
-  third="$(sed -n '3p' -- "$1")"
-  [[ "$first" == '#!/usr/bin/env bash' ]] || return 1
-  [[ "$second" == 'exec "'*'/nova" "$@"' ]] || return 1
-  [[ -z "$third" ]]
-}
-
-managed_legacy_desktop() {
-  [[ -f "$1" ]] || return 1
-  grep -Fxq 'Type=Application' "$1" &&
-    grep -Fxq 'Icon=fedora-nova' "$1" &&
-    grep -Eq '^Exec=fedora-nova (settings|control)$' "$1"
-}
-
 managed_session_launcher() {
   [[ -f "$1" ]] || return 1
   grep -Fxq '#!/usr/bin/env bash' "$1" &&
@@ -77,12 +59,12 @@ managed_session_desktop() {
 }
 
 # Preflight every file before mutating anything.
-if [[ -e "$legacy_wrapper" ]] && ! same_file "$legacy_wrapper" "$canonical_cli"; then
-  managed_legacy_wrapper "$legacy_wrapper" ||
+if [[ -e "$legacy_wrapper" || -L "$legacy_wrapper" ]] && ! same_file "$legacy_wrapper" "$canonical_cli"; then
+  is_managed_legacy_cli_wrapper "$legacy_wrapper" ||
     die "Nelze bezpečně migrovat: $legacy_wrapper není rozpoznaný Fedora Nova legacy wrapper."
 fi
-if [[ -e "$legacy_desktop" ]]; then
-  managed_legacy_desktop "$legacy_desktop" ||
+if [[ -e "$legacy_desktop" || -L "$legacy_desktop" ]]; then
+  is_managed_legacy_settings_desktop "$legacy_desktop" ||
     die "Nelze bezpečně migrovat: $legacy_desktop není rozpoznaná legacy Fedora Nova desktop položka."
 fi
 if [[ -e "$session_launcher" ]]; then

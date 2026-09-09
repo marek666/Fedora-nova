@@ -61,6 +61,53 @@ require_legacy_layout() {
   done
 }
 
+is_managed_legacy_cli_wrapper() {
+  local path="${1:-}" first second third fourth
+  [[ -n "$path" && -f "$path" && ! -L "$path" ]] || return 1
+  IFS= read -r first < "$path" || true
+  second="$(sed -n '2p' -- "$path")"
+  third="$(sed -n '3p' -- "$path")"
+  fourth="$(sed -n '4p' -- "$path")"
+  [[ "$first" == '#!/usr/bin/env bash' ]] || return 1
+
+  # Current compatibility wrapper: explicit ownership marker plus shell-safe
+  # target generated with printf %q.
+  if [[ "$second" == '# Fedora Nova legacy standalone CLI wrapper' ]]; then
+    [[ "$third" == exec\ *' "$@"' && -z "$fourth" ]]
+    return
+  fi
+
+  # Historical two-line wrapper kept recognizable for migration/uninstall.
+  [[ "$second" == 'exec "'*'/nova" "$@"' && -z "$third" ]]
+}
+
+write_legacy_cli_wrapper() {
+  local path="${1:-}" target="${2:-}" dir tmp quoted
+  [[ -n "$path" && "$path" == /* && -n "$target" && "$target" == /* ]] ||
+    die "Neplatná cesta legacy CLI wrapperu nebo targetu."
+  dir="$(dirname -- "$path")"
+  mkdir -p "$dir"
+  printf -v quoted '%q' "$target"
+  tmp="$(mktemp "$dir/.fedora-nova-wrapper.XXXXXX")"
+  trap 'rm -f -- "$tmp"' RETURN
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf '# Fedora Nova legacy standalone CLI wrapper\n'
+    printf 'exec %s "$@"\n' "$quoted"
+  } > "$tmp"
+  chmod 0755 "$tmp"
+  mv -f -- "$tmp" "$path"
+  trap - RETURN
+}
+
+is_managed_legacy_settings_desktop() {
+  local path="${1:-}"
+  [[ -n "$path" && -f "$path" && ! -L "$path" ]] || return 1
+  grep -Fxq 'Type=Application' "$path" &&
+    grep -Fxq 'Icon=fedora-nova' "$path" &&
+    grep -Eq '^Exec=fedora-nova (settings|control)$' "$path"
+}
+
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 schema_exists() {

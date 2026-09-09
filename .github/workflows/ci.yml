@@ -21,6 +21,14 @@ jobs:
       - name: Static checks
         run: ./check.sh
 
+      - name: Standalone integration regressions
+        run: |
+          python3 -m unittest -v \
+            tests.test_legacy_integration_ownership \
+            tests.test_install_migration \
+            tests.test_install_layout_guard \
+            tests.test_asset_install_boundaries
+
       - name: Configure
         run: meson setup _build --prefix=/usr
 
