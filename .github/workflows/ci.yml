@@ -22,7 +22,7 @@ jobs:
         run: ./check.sh
 
       - name: Regression suite
-        run: python3 -m unittest discover -v
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Configure
         run: meson setup _build --prefix=/usr
