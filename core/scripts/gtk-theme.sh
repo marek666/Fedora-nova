@@ -99,32 +99,184 @@ button {{
 /* NOVA_GTK_END */'''
 
 block3 = f'''/* NOVA_GTK_START */
-/* Fedora Nova GTK3 compatibility layer. */
+/* Fedora Nova GTK3 compatibility layer.
+ * Keep classic GTK3 applications coherent without replacing the system theme.
+ */
 @define-color theme_bg_color {bg};
 @define-color theme_fg_color {text};
 @define-color theme_base_color {large};
 @define-color theme_text_color {text};
+@define-color theme_selected_bg_color {accent};
+@define-color theme_selected_fg_color {accent_fg};
 @define-color selected_bg_color {accent};
 @define-color selected_fg_color {accent_fg};
+@define-color theme_unfocused_bg_color {bg};
+@define-color theme_unfocused_fg_color {text};
+@define-color theme_unfocused_base_color {large};
+@define-color theme_unfocused_text_color {text};
+@define-color theme_unfocused_selected_bg_color {surface2};
+@define-color theme_unfocused_selected_fg_color {text};
 @define-color insensitive_bg_color {surface};
 @define-color insensitive_fg_color {text};
 @define-color borders {border};
 
 window,
+window.background,
 .background {{
   background-color: @theme_bg_color;
   color: @theme_fg_color;
 }}
+
+/* Headerbars are client-side GTK widgets. Do not style the generic
+ * .titlebar class: classic server-side decorations are owned by Mutter and
+ * setting only their foreground can produce white text on a light frame.
+ */
 headerbar,
-.titlebar {{
+headerbar.titlebar {{
   background-color: {surface};
   color: {text};
   border-color: {border};
 }}
+
+menubar {{
+  background-color: {panel};
+  color: {text};
+  border-color: {border};
+}}
+menubar > menuitem {{
+  background-color: transparent;
+  color: {text};
+}}
+menubar > menuitem:hover,
+menubar > menuitem:checked {{
+  background-color: {surface2};
+  color: {text};
+}}
+
+toolbar,
+.toolbar,
+actionbar {{
+  background-color: {surface};
+  color: {text};
+  border-color: {border};
+}}
+toolbar separator,
+.toolbar separator,
+separator {{
+  background-color: {border};
+}}
+
+.view,
+treeview.view,
+iconview,
+textview text,
+list,
+listbox,
+flowbox {{
+  background-color: {large};
+  color: {text};
+}}
+
+treeview.view header button {{
+  background-color: {surface};
+  color: {text};
+  border-color: {border};
+  border-radius: 0;
+}}
+treeview.view header button:hover {{
+  background-color: {surface2};
+}}
+
+*:selected,
+row:selected,
+treeview.view:selected,
+iconview:selected {{
+  background-color: {accent};
+  color: {accent_fg};
+}}
+*:selected:backdrop,
+row:selected:backdrop,
+treeview.view:selected:backdrop,
+iconview:selected:backdrop {{
+  background-color: {surface2};
+  color: {text};
+}}
+
+button {{
+  background-color: {surface2};
+  color: {text};
+  border: 1px solid {border};
+  border-radius: 8px;
+}}
+button:hover {{
+  background-color: {card};
+}}
+button:active,
+button:checked {{
+  background-color: {accent};
+  color: {accent_fg};
+}}
+
+entry,
+spinbutton,
+combobox button {{
+  background-color: {large};
+  color: {text};
+  border-color: {border};
+}}
+entry selection {{
+  background-color: {accent};
+  color: {accent_fg};
+}}
+
+menu,
+.menu,
+.context-menu,
+popover {{
+  background-color: {surface};
+  color: {text};
+  border-color: {border};
+}}
+menuitem {{
+  color: {text};
+}}
+menuitem:hover {{
+  background-color: {accent};
+  color: {accent_fg};
+}}
+
+notebook > header {{
+  background-color: {surface};
+  color: {text};
+  border-color: {border};
+}}
+notebook > header > tabs > tab {{
+  color: {text};
+}}
+notebook > header > tabs > tab:checked {{
+  background-color: {surface2};
+  color: {text};
+}}
+
 .sidebar,
 .navigation-sidebar {{
   background-color: {card};
   color: {text};
+}}
+.sidebar row:selected,
+.navigation-sidebar row:selected {{
+  background-color: {accent};
+  color: {accent_fg};
+}}
+
+frame,
+scrolledwindow {{
+  border-color: {border};
+}}
+tooltip {{
+  background-color: {surface2};
+  color: {text};
+  border-color: {border};
 }}
 /* NOVA_GTK_END */'''
 Path(sys.argv[2]).write_text(block4 + '\n', encoding='utf-8')
