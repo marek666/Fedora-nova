@@ -60,7 +60,6 @@ rm -rf \
   "$NOVA_DATA_HOME/gnome-shell/extensions/topbar-all-monitors@fa8i.github.io" \
   "$NOVA_CONFIG_DIR"
 rm -f \
-  "$NOVA_DATA_HOME/org.gnome.Ptyxis/palettes/Fedora Nova.palette" \
   "$NOVA_DATA_HOME/org.gnome.Ptyxis/palettes/Fedora Nova Tech.palette" \
   "$NOVA_DATA_HOME/org.gnome.Ptyxis/palettes/Fedora Nova Clean.palette" \
   "$NOVA_DATA_HOME/org.gnome.Ptyxis/palettes/Fedora Nova Midnight.palette" \
@@ -68,6 +67,15 @@ rm -f \
   "$NOVA_DATA_HOME/org.gnome.Ptyxis/palettes/Fedora Nova Pulse.palette" \
   "$NOVA_CONFIG_HOME/fastfetch/fedora-nova.jsonc" \
   "$NOVA_DATA_HOME/icons/hicolor/scalable/apps/fedora-nova.svg"
+
+LEGACY_PALETTE="$NOVA_PTYXIS_DIR/Fedora Nova.palette"
+if [[ -e "$LEGACY_PALETTE" || -L "$LEGACY_PALETTE" ]]; then
+  if is_managed_legacy_ptyxis_palette "$LEGACY_PALETTE"; then
+    rm -f -- "$LEGACY_PALETTE"
+  else
+    warn "Zachovávám $LEGACY_PALETTE: není to rozpoznaná legacy Fedora Nova Ptyxis paleta."
+  fi
+fi
 
 LEGACY_DESKTOP="$NOVA_DATA_HOME/applications/fedora-nova-control.desktop"
 if [[ -e "$LEGACY_DESKTOP" || -L "$LEGACY_DESKTOP" ]]; then
