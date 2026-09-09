@@ -36,7 +36,7 @@ is_shell_welcome_done() {
 }
 
 case "$ACTION" in
-  off|disable)
+  off)
     if key_exists org.gnome.shell welcome-dialog-last-shown-version; then
       try_set org.gnome.shell welcome-dialog-last-shown-version "'$(shell_version)'"
     fi
@@ -75,6 +75,6 @@ case "$ACTION" in
     fi
     ;;
   *)
-    die "Použij: $0 {off|disable|status}"
+    die "Použij: $0 {off|status}"
     ;;
 esac
