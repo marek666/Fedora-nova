@@ -85,3 +85,14 @@ jobs:
               exit 1
             fi
           done
+
+          for required_data in \
+            applications/io.github.fedoranova.FedoraNova.desktop \
+            applications/io.github.fedoranova.FedoraNova.Devel.desktop \
+            metainfo/io.github.fedoranova.FedoraNova.metainfo.xml \
+            metainfo/io.github.fedoranova.FedoraNova.Devel.metainfo.xml; do
+            if [[ ! -f "_staging/usr/share/$required_data" ]]; then
+              echo "Required application metadata missing from staging: $required_data" >&2
+              exit 1
+            fi
+          done

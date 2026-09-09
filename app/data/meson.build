@@ -44,6 +44,11 @@ if get_option('production_app')
   )
 
   install_data(
+    'io.github.fedoranova.FedoraNova.metainfo.xml',
+    install_dir: join_paths(get_option('datadir'), 'metainfo'),
+  )
+
+  install_data(
     'io.github.fedoranova.FedoraNova.gschema.xml',
     install_dir: join_paths(get_option('datadir'), 'glib-2.0', 'schemas'),
   )
