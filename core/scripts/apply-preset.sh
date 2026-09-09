@@ -90,7 +90,7 @@ apply_full() {
 
   if [[ $ASSETS -eq 1 ]]; then
     log "Instaluji lokální Nova assety a bundled rozšíření"
-    "$SCRIPT_DIR/install-assets.sh"
+    "$SCRIPT_DIR/install-user-assets.sh"
   fi
 
   log "Aplikuji kompletní Nova setup"
