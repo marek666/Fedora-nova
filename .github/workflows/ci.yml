@@ -29,6 +29,13 @@ jobs:
             tests.test_install_layout_guard \
             tests.test_asset_install_boundaries
 
+      - name: CLI compatibility regressions
+        run: |
+          python3 -m unittest -v \
+            tests.test_settings_routing \
+            tests.test_legacy_frontend_retirement \
+            tests.test_package_cli
+
       - name: Configure
         run: meson setup _build --prefix=/usr
 

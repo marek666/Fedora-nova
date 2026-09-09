@@ -54,23 +54,19 @@ class SettingsRouting(unittest.TestCase):
         env = dict(self.env)
         if override is not None:
             env["FEDORA_NOVA_SETTINGS_LAUNCHER"] = str(override)
-        for alias in ["settings", "control"]:
-            with self.subTest(alias=alias, cli=str(cli), override=override):
-                result = subprocess.run([str(cli), alias, *self.args], env=env,
-                                        cwd=self.root, capture_output=True, text=True)
-                self.assertEqual(result.returncode, status, result.stderr)
-                self.assertEqual(json.loads(result.stdout),
-                                 {"launcher": expected, "args": self.args})
+        result = subprocess.run([str(cli), "settings", *self.args], env=env,
+                                cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(result.returncode, status, result.stderr)
+        self.assertEqual(json.loads(result.stdout),
+                         {"launcher": expected, "args": self.args})
 
     def assert_unavailable(self, cli):
-        for alias in ["settings", "control"]:
-            with self.subTest(alias=alias, cli=str(cli)):
-                result = subprocess.run([str(cli), alias, *self.args], env=self.env,
-                                        cwd=self.root, capture_output=True, text=True)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stdout, "")
-                self.assertIn("Production Settings launcher není dostupný", result.stderr)
-                self.assertNotIn("stale", result.stderr)
+        result = subprocess.run([str(cli), "settings", *self.args], env=self.env,
+                                cwd=self.root, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("Production Settings launcher není dostupný", result.stderr)
+        self.assertNotIn("stale", result.stderr)
 
     def test_package_layout_prefers_modern_launcher(self):
         cli = self.core("package")
@@ -109,14 +105,13 @@ class SettingsRouting(unittest.TestCase):
         for layout in ["package", "standalone"]:
             cli = self.core(layout)
             for override in ["", self.root / "missing", not_executable, directory, broken]:
-                for alias in ["settings", "control"]:
-                    with self.subTest(layout=layout, override=override, alias=alias):
-                        env = dict(self.env, FEDORA_NOVA_SETTINGS_LAUNCHER=str(override))
-                        result = subprocess.run([str(cli), alias, *self.args], env=env,
-                                                cwd=self.root, capture_output=True, text=True)
-                        self.assertNotEqual(result.returncode, 0)
-                        self.assertEqual(result.stdout, "")
-                        self.assertIn("FEDORA_NOVA_SETTINGS_LAUNCHER", result.stderr)
+                with self.subTest(layout=layout, override=override):
+                    env = dict(self.env, FEDORA_NOVA_SETTINGS_LAUNCHER=str(override))
+                    result = subprocess.run([str(cli), "settings", *self.args], env=env,
+                                            cwd=self.root, capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(result.stdout, "")
+                    self.assertIn("FEDORA_NOVA_SETTINGS_LAUNCHER", result.stderr)
 
     def test_relative_override_is_a_path_not_a_path_search(self):
         self.launcher(self.root / "fedora-nova-settings", "relative")
@@ -132,6 +127,15 @@ class SettingsRouting(unittest.TestCase):
     def test_launcher_failure_propagates(self):
         self.launcher(self.prefix / "bin/fedora-nova-settings", "modern", status=17)
         self.assert_routes(self.core("package"), "modern", status=17)
+
+    def test_control_alias_is_rejected_and_does_not_launch_settings(self):
+        cli = self.core("package")
+        self.launcher(self.prefix / "bin/fedora-nova-settings", "modern")
+        result = subprocess.run([str(cli), "control", *self.args], env=self.env,
+                                cwd=self.root, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Neznámý příkaz: control", result.stderr)
+        self.assertNotIn('"launcher": "modern"', result.stdout)
 
 
 if __name__ == "__main__":
