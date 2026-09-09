@@ -29,6 +29,20 @@ class CliSurfaceCleanupTests(unittest.TestCase):
             "FEDORA_NOVA_APP_DIR": str(CORE),
         }
 
+    def run_rejected(self, command: list[Path | str], expected: str) -> None:
+        env = self.isolated_env()
+        result = subprocess.run(
+            [str(arg) for arg in command],
+            env=env,
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(expected, result.stderr)
+        for key in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"):
+            self.assertFalse(Path(env[key]).exists())
+
     def test_cli_help_exposes_only_canonical_commands(self) -> None:
         result = subprocess.run(
             [str(CLI), "--help"],
@@ -46,28 +60,28 @@ class CliSurfaceCleanupTests(unittest.TestCase):
     def test_removed_cli_aliases_are_rejected(self) -> None:
         for command in ("full-setup", "migrate"):
             with self.subTest(command=command):
-                result = subprocess.run(
-                    [str(CLI), command],
-                    env=self.isolated_env(),
-                    cwd=REPO,
-                    capture_output=True,
-                    text=True,
-                )
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn(f"Neznámý příkaz: {command}", result.stderr)
+                self.run_rejected([CLI, command], f"Neznámý příkaz: {command}")
 
     def test_removed_preset_aliases_are_rejected_before_host_changes(self) -> None:
         for preset in ("nova-full", "mutter"):
             with self.subTest(preset=preset):
-                result = subprocess.run(
-                    [str(PRESET), preset],
-                    env=self.isolated_env(),
-                    cwd=REPO,
-                    capture_output=True,
-                    text=True,
-                )
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn(f"Neznámý preset: {preset}", result.stderr)
+                self.run_rejected([PRESET, preset], f"Neznámý preset: {preset}")
+
+    def test_removed_session_action_aliases_are_rejected_without_state(self) -> None:
+        script = CORE / "scripts" / "session-restore.sh"
+        for action in ("restore", "on", "autostart", "off"):
+            with self.subTest(action=action):
+                self.run_rejected([script, action], "{apply|enable|disable|status}")
+
+    def test_removed_monitor_action_aliases_are_rejected_without_state(self) -> None:
+        script = CORE / "scripts" / "monitor-panel.sh"
+        for action in ("enable", "disable"):
+            with self.subTest(action=action):
+                self.run_rejected([script, action], "{install|refresh|on|off|status}")
+
+    def test_removed_welcome_disable_alias_is_rejected_without_state(self) -> None:
+        script = CORE / "scripts" / "disable-welcome.sh"
+        self.run_rejected([script, "disable"], "{off|status}")
 
     def test_obsolete_compatibility_report_is_removed(self) -> None:
         self.assertFalse((CORE / "scripts" / "check-compatibility.sh").exists())
