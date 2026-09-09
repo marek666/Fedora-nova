@@ -13,6 +13,7 @@ CORE = REPO / "core"
 CLI = CORE / "nova"
 PRESET = CORE / "scripts" / "apply-preset.sh"
 WALLPAPERS = CORE / "assets" / "wallpapers"
+PALETTES = CORE / "terminal" / "ptyxis"
 PROFILES = CORE / "config" / "profiles.json"
 
 
@@ -94,6 +95,19 @@ class CliSurfaceCleanupTests(unittest.TestCase):
                 self.assertTrue((WALLPAPERS / wallpaper).is_file())
 
         self.assertFalse((WALLPAPERS / "fedora-nova-flow-preview.png").exists())
+
+    def test_builtin_ptyxis_palettes_match_builtin_profiles(self) -> None:
+        profiles = json.loads(PROFILES.read_text(encoding="utf-8"))["profiles"]
+        expected = {f"Fedora {profile['title']}.palette" for profile in profiles.values()}
+        actual = {path.name for path in PALETTES.glob("*.palette")}
+        self.assertEqual(actual, expected)
+        self.assertNotIn("Fedora Nova.palette", actual)
+
+        for profile in profiles.values():
+            name = f"Fedora {profile['title']}"
+            path = PALETTES / f"{name}.palette"
+            with self.subTest(palette=path.name):
+                self.assertIn(f"Name={name}\n", path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
