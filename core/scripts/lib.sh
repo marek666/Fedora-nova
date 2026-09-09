@@ -108,6 +108,14 @@ is_managed_legacy_settings_desktop() {
     grep -Eq '^Exec=fedora-nova (settings|control)$' "$path"
 }
 
+is_managed_legacy_ptyxis_palette() {
+  local path="${1:-}" digest rest
+  [[ -n "$path" && -f "$path" && ! -L "$path" ]] || return 1
+  command -v sha256sum >/dev/null 2>&1 || return 1
+  read -r digest rest < <(sha256sum -- "$path") || return 1
+  [[ "$digest" == 675966d3d4bd29309c61055236ab254def68111eea8de225fa2a21755e4cb0d3 ]]
+}
+
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 schema_exists() {
