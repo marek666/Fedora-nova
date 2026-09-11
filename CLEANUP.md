@@ -28,6 +28,8 @@ release blocker requires another cleanup change.
 - [x] keep source-only development files out of canonical and standalone payloads
 - [x] run the full default regression suite in CI with required dependencies
 - [x] keep Shell Preview development checkout-local instead of installing a global helper
+- [x] fix the post-audit clean-state CLI/runtime regressions found after the structural cleanup
+- [x] verify a completely fresh `development` clone with `./check.sh` and all 160 regression/lifecycle tests enabled
 
 ## Intentional compatibility surface
 
@@ -46,12 +48,13 @@ These are intentionally deferred so theme and feature development can continue n
 
 - [ ] reduce remaining GNOME Shell CSS parser/compatibility warnings while evolving the theme
 - [ ] make root `VERSION` the generated/canonical source for every version consumer
-- [ ] recheck Native Preview, Native Host, Flatpak Preview and Shell Preview from a completely fresh clone before release
+- [ ] repeat the full interactive Native Preview, Native Host, Flatpak Preview and Shell Preview smoke from a fresh clone before release; the fresh-clone static and complete regression/lifecycle baseline is already verified
 - [ ] run a real GTK3 visual smoke test on applications such as virt-manager after larger GTK/theme changes
 - [ ] keep canonical package staging/install/uninstall and legacy migration paths covered by release smoke tests
 - [ ] decide the compatibility window for removing standalone/core-only install and migration support
 - [ ] revisit terminal integration as a first-class Settings/CLI feature instead of compatibility-era asset copying
 - [ ] periodically audit third-party bundled assets and GNOME extension compatibility when upstream versions change
+- [ ] replace deprecated PyGObject/GLib APIs when they become relevant to runtime compatibility; current deprecation warnings are non-blocking
 
 ## Development direction
 
