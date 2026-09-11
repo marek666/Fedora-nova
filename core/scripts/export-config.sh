@@ -35,12 +35,18 @@ done
 if [[ -d "$NOVA_CUSTOM_DIR" ]]; then
   cp -a "$NOVA_CUSTOM_DIR" "$PAYLOAD/custom/profiles"
 fi
-find "$NOVA_THEMES_DIR" -mindepth 1 -maxdepth 1 -type d \
-  -name 'Fedora-Nova-Custom-*' -exec cp -a {} "$PAYLOAD/custom/themes/" \;
-find "$NOVA_WALLPAPER_DIR" -maxdepth 1 -type f \
-  -name 'custom-*.svg' -exec cp -a {} "$PAYLOAD/custom/wallpapers/" \;
-find "$NOVA_PTYXIS_DIR" -maxdepth 1 -type f \
-  -name 'Fedora Nova Custom *.palette' -exec cp -a {} "$PAYLOAD/custom/palettes/" \;
+if [[ -d "$NOVA_THEMES_DIR" ]]; then
+  find "$NOVA_THEMES_DIR" -mindepth 1 -maxdepth 1 -type d \
+    -name 'Fedora-Nova-Custom-*' -exec cp -a {} "$PAYLOAD/custom/themes/" \;
+fi
+if [[ -d "$NOVA_WALLPAPER_DIR" ]]; then
+  find "$NOVA_WALLPAPER_DIR" -maxdepth 1 -type f \
+    -name 'custom-*.svg' -exec cp -a {} "$PAYLOAD/custom/wallpapers/" \;
+fi
+if [[ -d "$NOVA_PTYXIS_DIR" ]]; then
+  find "$NOVA_PTYXIS_DIR" -maxdepth 1 -type f \
+    -name 'Fedora Nova Custom *.palette' -exec cp -a {} "$PAYLOAD/custom/palettes/" \;
+fi
 
 cat >"$PAYLOAD/manifest.txt" <<EOF
 format=fedora-nova-export-v2
