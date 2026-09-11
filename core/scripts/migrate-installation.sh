@@ -35,6 +35,7 @@ canonical_settings="$prefix/bin/fedora-nova-settings"
 
 legacy_wrapper="$HOME/.local/bin/fedora-nova"
 legacy_desktop="$NOVA_DATA_HOME/applications/fedora-nova-control.desktop"
+legacy_palette="$NOVA_PTYXIS_DIR/Fedora Nova.palette"
 session_launcher="$NOVA_CONFIG_DIR/session-restore"
 session_desktop="$NOVA_SESSION_AUTOSTART"
 marker="$NOVA_STATE_DIR/migration-canonical-layout"
@@ -66,6 +67,10 @@ fi
 if [[ -e "$legacy_desktop" || -L "$legacy_desktop" ]]; then
   is_managed_legacy_settings_desktop "$legacy_desktop" ||
     die "Nelze bezpečně migrovat: $legacy_desktop není rozpoznaná legacy Fedora Nova desktop položka."
+fi
+if [[ -e "$legacy_palette" || -L "$legacy_palette" ]]; then
+  is_managed_legacy_ptyxis_palette "$legacy_palette" ||
+    die "Nelze bezpečně migrovat: $legacy_palette není rozpoznaná legacy Fedora Nova Ptyxis paleta."
 fi
 if [[ -e "$session_launcher" ]]; then
   managed_session_launcher "$session_launcher" ||
@@ -114,6 +119,11 @@ fi
 if [[ -e "$legacy_desktop" ]]; then
   backup_file "$legacy_desktop" fedora-nova-control.desktop
   remove_managed "$legacy_desktop"
+fi
+
+if [[ -e "$legacy_palette" ]]; then
+  backup_file "$legacy_palette" 'Fedora Nova.palette'
+  remove_managed "$legacy_palette"
 fi
 
 if [[ -e "$session_launcher" ]]; then
