@@ -62,6 +62,30 @@ run() {
   if [[ $DRY_RUN -eq 1 ]]; then printf '+ '; printf '%q ' "$@"; printf '\n'; else "$@"; fi
 }
 
+prune_standalone_payload() {
+  local root="$1"
+  local -a source_only=(
+    "$root/themes-src"
+    "$root/scripts/build-theme-sass.sh"
+    "$root/scripts/preview_reload.py"
+    "$root/scripts/theme_hot_reload.py"
+  )
+
+  if [[ $DRY_RUN -eq 1 ]]; then
+    local path
+    for path in "${source_only[@]}"; do
+      printf '+ rm -rf %q\n' "$path"
+    done
+    printf '+ find %q -type d -name __pycache__ -prune -exec rm -rf -- {} +\n' "$root"
+    printf "+ find %q -type f -name '*.pyc' -delete\n" "$root"
+    return 0
+  fi
+
+  rm -rf -- "${source_only[@]}"
+  find "$root" -type d -name __pycache__ -prune -exec rm -rf -- {} +
+  find "$root" -type f -name '*.pyc' -delete
+}
+
 log "Instaluji $NOVA_NAME $NOVA_VERSION (profil: $PROFILE)"
 
 if [[ $SKIP_PACKAGES -ne 1 ]]; then
@@ -87,6 +111,10 @@ else
   mkdir -p "$APP_DEST"
   cp -a "$PROJECT_DIR/." "$APP_DEST/"
 fi
+
+# Standalone compatibility needs its own installer/uninstaller files, but not
+# Builder/theme-development helpers or Python bytecode copied from a checkout.
+prune_standalone_payload "$APP_DEST"
 
 if [[ $DRY_RUN -eq 1 ]]; then
   printf '+ %q\n' "$APP_DEST/scripts/install-assets.sh"
