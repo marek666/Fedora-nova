@@ -161,7 +161,10 @@ class AssetInstallBoundaries(unittest.TestCase):
         self.assertTrue((installed / "config/profiles.json").is_file())
         self.assertTrue((installed / "config/curves.json").is_file())
         self.assertFalse((installed / "config/colors.json").exists())
-        self.assertIn(str(installed / "nova"), self.wrapper.read_text())
+        self.assertIn("# Fedora Nova legacy standalone CLI wrapper", self.wrapper.read_text())
+        invoked = subprocess.run([str(self.wrapper), "version"], env=self.env,
+                                 capture_output=True, text=True, check=True)
+        self.assertEqual(invoked.stdout, "Fedora Nova 0.8.0-dev\n")
         self.assertFalse(self.desktop.exists())
         self.assertFalse((installed / "applications/fedora-nova-control.desktop").exists())
         self.assert_assets()
