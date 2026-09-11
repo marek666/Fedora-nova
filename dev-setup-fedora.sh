@@ -22,12 +22,7 @@ sudo dnf install \
   gnome-shell-extension-dash-to-dock
 
 echo
-ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-mkdir -p "$HOME/.local/bin"
-ln -sfn "$ROOT/dev-shell-preview.sh" "$HOME/.local/bin/fedora-nova-shell-preview"
-
-echo
 echo "Hotovo."
-echo "Builder projekt: $ROOT/meson.build"
-echo "Nested Shell preview:"
-echo "  fedora-nova-shell-preview tech"
+echo "Builder projekt: ./meson.build"
+echo "Nested Shell preview z aktuálního checkoutu:"
+echo "  ./dev-shell-preview.sh tech"
