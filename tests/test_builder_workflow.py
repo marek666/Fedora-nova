@@ -417,7 +417,7 @@ print(json.dumps(dict(config=str(backend.nova_config), before=before,
             env = {**os.environ, "NOVA_BUILDER_PRIVATE_BUS": "1"}
             result = subprocess.run(
                 ["dbus-run-session", "--", sys.executable, "-B", "-m", "unittest", "-v",
-                 f"{__name__}.NativeLaunchers.test_poisoned_environment_and_two_independent_native_instances"],
+                 "tests.test_builder_workflow.NativeLaunchers.test_poisoned_environment_and_two_independent_native_instances"],
                 cwd=REPO, env=env, capture_output=True, text=True, timeout=40,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

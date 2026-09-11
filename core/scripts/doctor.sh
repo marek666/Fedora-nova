@@ -95,25 +95,28 @@ else
   issues=$((issues+1))
 fi
 
-if [[ -n "$css" ]] &&
-   grep -Eqi 'blur-effect|filter:[[:space:]]*blur' "$css" 2>/dev/null; then
-  printf '  WARN Theme obsahuje blur CSS.\n'
-  issues=$((issues+1))
-else
-  printf '  OK   Aktivní theme neobsahuje CSS blur.\n'
-fi
+if [[ -n "$css" && -f "$css" ]]; then
+  if grep -Eqi 'blur-effect|filter:[[:space:]]*blur' "$css" 2>/dev/null; then
+    printf '  WARN Theme obsahuje blur CSS.\n'
+    issues=$((issues+1))
+  else
+    printf '  OK   Aktivní theme neobsahuje CSS blur.\n'
+  fi
 
-if [[ -n "$css" ]] && python3 - "$css" <<'PY'
+  if python3 - "$css" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 blocks = re.findall(r"\.quick-settings\s*\{([^}]*)\}", text, re.S)
 raise SystemExit(0 if any(re.search(r"box-shadow\s*:\s*(?!none)", b) for b in blocks) else 1)
 PY
-then
-  printf '  WARN Quick Settings mohou obsahovat drahý stín.\n'
-  issues=$((issues+1))
+  then
+    printf '  WARN Quick Settings mohou obsahovat drahý stín.\n'
+    issues=$((issues+1))
+  else
+    printf '  OK   Quick Settings nemají zjevný drahý stín.\n'
+  fi
 else
-  printf '  OK   Quick Settings nemají zjevný drahý stín.\n'
+  printf '  INFO Kontrola blur/stínu přeskočena, protože theme soubor není dostupný.\n'
 fi
 
 if [[ -n "$wallpaper" && -f "$wallpaper" ]]; then
@@ -129,3 +132,4 @@ journalctl --user -b --no-pager 2>/dev/null |
   tail -n 25 || true
 
 printf '\nVýsledek: %s problémů/varování.\n' "$issues"
+(( issues == 0 ))

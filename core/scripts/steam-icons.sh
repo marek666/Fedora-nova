@@ -54,7 +54,11 @@ case "$ACTION" in
   status)
     BASE="$(cat "$STATE_ROOT/base-theme" 2>/dev/null || echo —)"
     ACTIVE="$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null || echo unavailable)"
-    COUNT="$(find "$THEME_ROOT" -type f -path '*/apps/*.png' 2>/dev/null | wc -l)"
+    if [[ -d "$THEME_ROOT" ]]; then
+      COUNT="$(find "$THEME_ROOT" -type f -path '*/apps/*.png' 2>/dev/null | wc -l)"
+    else
+      COUNT=0
+    fi
     printf 'Active:     %s\n' "$ACTIVE"
     printf 'Base theme: %s\n' "$BASE"
     printf 'Generated:  %s PNG files\n' "$COUNT"
