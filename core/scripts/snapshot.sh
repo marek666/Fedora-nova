@@ -54,7 +54,9 @@ restore_snapshot() {
 
   load() {
     local file="$1" path="$2"
-    [[ -s "$dir/dconf/$file.dconf" ]] && dconf load "$path" < "$dir/dconf/$file.dconf"
+    if [[ -s "$dir/dconf/$file.dconf" ]]; then
+      dconf load "$path" < "$dir/dconf/$file.dconf"
+    fi
   }
   load interface /org/gnome/desktop/interface/
   load wm-preferences /org/gnome/desktop/wm/preferences/
