@@ -4,13 +4,13 @@
 
 Current development focus:
 
-- finish the repository and development workflow cleanup,
-- stabilize GTK4/libadwaita Settings development,
-- keep the Fedora Nova runtime and Settings frontend clearly separated,
-- consolidate version and project metadata,
-- remove obsolete and duplicated development infrastructure,
-- improve automated checks and packaging validation,
-- continue theme compatibility cleanup for current GNOME releases.
+- return to visible GNOME Shell/theme and profile development,
+- use the verified nested Shell preview and selective hot reload for fast visual iteration,
+- improve theme consistency and compatibility on current GNOME releases,
+- keep the GTK4/libadwaita Settings frontend and canonical runtime stable while features evolve,
+- treat the remaining items in `CLEANUP.md` as deferred follow-up unless they become concrete blockers.
+
+The structural repository cleanup is complete for the current 0.8.0-dev baseline. Cleanup is no longer the default workstream.
 
 ## Preview development
 
@@ -57,23 +57,18 @@ Remaining before calling Builder support release-stable:
 
 Planned work:
 
-- make `app/` the canonical Fedora Nova graphical frontend,
-- remove remaining duplicated legacy Settings implementations when replacement
-  coverage is complete,
+- keep `app/` as the canonical Fedora Nova graphical frontend,
 - keep GUI state and runtime backend clearly separated,
 - improve diagnostics and host/preview status reporting,
-- continue responsive GTK4/libadwaita UI cleanup.
+- continue responsive GTK4/libadwaita UI development.
 
 ## Core
 
 Planned work:
 
-- simplify runtime scripts,
-- consolidate configuration sources,
-- improve recovery and diagnostics,
-- continue separating development-only tooling from installed runtime files,
-- eventually reduce duplicated legacy GUI/control entry points once the modern
-  Settings application fully replaces them.
+- improve recovery and diagnostics as concrete runtime needs appear,
+- preserve the canonical runtime/source boundary established for 0.8.0-dev,
+- avoid reopening compatibility cleanup unless it becomes a release blocker or an intentionally scheduled breaking change.
 
 ## Terminal integration
 
@@ -103,10 +98,9 @@ Planned work:
 
 - continue moving maintainable Shell styling to Sass sources,
 - keep compiled CSS as the runtime artifact,
-- reduce GNOME Shell CSS parser warnings,
-- investigate Dash to Dock theme-node warnings separately from the reload
-  mechanism,
-- improve profile consistency,
+- improve profile consistency and visual coherence,
+- reduce GNOME Shell CSS parser warnings as part of theme work rather than a separate cleanup phase,
+- investigate Dash to Dock theme-node warnings when they affect visible theme behaviour,
 - continue testing theme compatibility against current GNOME Shell releases.
 
 ## Packaging and runtime boundary
