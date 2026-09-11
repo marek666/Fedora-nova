@@ -230,7 +230,9 @@ Install Fedora development dependencies with:
 ```
 
 This installs the native development tools used by Fedora Nova, including
-Builder, Meson, Flatpak Builder, Sass tooling and Mutter Development Kit.
+Builder, Meson, Flatpak Builder, Sass tooling and Mutter Development Kit. It
+does not install a global Shell Preview helper or bind development to one
+worktree; run `./dev-shell-preview.sh` from the checkout you are testing.
 
 ## Checks
 
