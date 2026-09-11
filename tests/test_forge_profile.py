@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,19 @@ COLOR_ROLES = (
     "accent", "accent_bright", "accent_fg", "secondary", "text",
     "muted", "border", "shadow",
 )
+
+
+def rgb_tuple(value: str) -> tuple[int, int, int]:
+    value = value.lstrip("#")
+    return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def rgba_pattern(value: str) -> re.Pattern[str]:
+    r, g, b = rgb_tuple(value)
+    return re.compile(
+        rf"rgba\(\s*{r}\s*,\s*{g}\s*,\s*{b}\s*,",
+        re.IGNORECASE,
+    )
 
 
 class ForgeProfileTests(unittest.TestCase):
@@ -61,15 +75,33 @@ class ForgeProfileTests(unittest.TestCase):
         css_path = self.data / "themes" / metadata["theme"] / "gnome-shell/gnome-shell.css"
         css = css_path.read_text(encoding="utf-8")
         css_lower = css.lower()
+        template = TEMPLATE.read_text(encoding="utf-8")
+        template_lower = template.lower()
 
         tech = json.loads(PROFILES.read_text(encoding="utf-8"))["profiles"]["tech"]
         for role in COLOR_ROLES:
             old = tech[role].lower()
             new = metadata[role].lower()
+            old_rgba = rgba_pattern(old)
+            new_rgba = rgba_pattern(new)
+            template_uses_hex = old in template_lower
+            template_uses_rgba = old_rgba.search(template) is not None
+
+            # A profile role only needs a replacement assertion when the compiled
+            # Tech template actually contains that token. Some canonical roles are
+            # metadata-only, while others are represented as rgba() rather than HEX.
+            if not (template_uses_hex or template_uses_rgba):
+                continue
+
             with self.subTest(role=role):
-                self.assertIn(new, css_lower)
-                if old != new:
-                    self.assertNotIn(old, css_lower)
+                if template_uses_hex:
+                    self.assertIn(new, css_lower)
+                    if old != new:
+                        self.assertNotIn(old, css_lower)
+                if template_uses_rgba:
+                    self.assertRegex(css, new_rgba)
+                    if old != new:
+                        self.assertIsNone(old_rgba.search(css))
 
         self.assertIn("Profile: Nova Forge — Token Audit", css)
         self.assertNotIn("Profile: Nova Tech", css)
