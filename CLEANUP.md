@@ -40,9 +40,19 @@ These paths remain on purpose and are not cleanup debt for 0.8.0-dev:
 
 They can be retired in a future compatibility-breaking release after that policy is decided.
 
-## Non-blocking follow-up
+## Deferred follow-up
 
-- [ ] reduce remaining GNOME Shell CSS parser/compatibility warnings
+These are intentionally deferred so theme and feature development can continue now. Revisit them when the related subsystem is being changed or before a release where they become blockers.
+
+- [ ] reduce remaining GNOME Shell CSS parser/compatibility warnings while evolving the theme
 - [ ] make root `VERSION` the generated/canonical source for every version consumer
-- [ ] recheck the verified development workflow from a completely fresh clone before release
-- [ ] decide the release window for removing standalone/core-only compatibility
+- [ ] recheck Native Preview, Native Host, Flatpak Preview and Shell Preview from a completely fresh clone before release
+- [ ] run a real GTK3 visual smoke test on applications such as virt-manager after larger GTK/theme changes
+- [ ] keep canonical package staging/install/uninstall and legacy migration paths covered by release smoke tests
+- [ ] decide the compatibility window for removing standalone/core-only install and migration support
+- [ ] revisit terminal integration as a first-class Settings/CLI feature instead of compatibility-era asset copying
+- [ ] periodically audit third-party bundled assets and GNOME extension compatibility when upstream versions change
+
+## Development direction
+
+The next default workstream is visual/theme and product development, not repository cleanup. Structural cleanup should only resume for a concrete regression, release blocker, or a deliberately scheduled compatibility-breaking change.
