@@ -12,6 +12,8 @@ Current development focus:
 
 The structural repository cleanup is complete for the current 0.8.0-dev baseline. Cleanup is no longer the default workstream.
 
+A fresh `development` clone has been verified with `./check.sh` and the complete 160-test regression/lifecycle suite. The remaining pre-release verification is the full interactive Preview/Host/Flatpak/Shell smoke on a clean checkout.
+
 ## Preview development
 
 The current development workflow now provides:
@@ -44,11 +46,12 @@ Verified:
 - current-checkout native launchers do not fall back to stale installed code,
 - Native Preview and Native Host can run as independent development instances,
 - Builder workflow regression tests pass,
-- Flatpak packaging and AppStream composition pass.
+- Flatpak packaging and AppStream composition pass,
+- fresh-clone static checks and the complete regression/lifecycle suite pass.
 
 Remaining before calling Builder support release-stable:
 
-- repeat the complete workflow from a fresh clone,
+- repeat the complete interactive Native Preview, Native Host, Flatpak Preview and Shell Preview workflow from a fresh clone,
 - keep documentation synchronized with launcher and manifest behaviour,
 - avoid sharing Meson build directories between host and SDK Meson versions,
 - continue adding regression coverage when the development workflow changes.
