@@ -1,0 +1,94 @@
+name: One-shot minimize Shell parser theme delta
+
+on:
+  push:
+    branches:
+      - fix/shell-preview-stability
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[parser-delta-minimized]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/shell-preview-stability
+          fetch-depth: 0
+
+      - name: Restore shipped themes and apply only St compatibility edits
+        run: |
+          git fetch origin development
+          git checkout origin/development -- core/themes
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          COMMENT_RE = re.compile(r'/\*.*?\*/', re.S)
+          SHADOW_RE = re.compile(r'(box-shadow\s*:\s*)([^;]+)(;)', re.S)
+
+          def first_shadow(value: str) -> str:
+              depth = 0
+              split = None
+              for index, char in enumerate(value):
+                  if char == '(':
+                      depth += 1
+                  elif char == ')':
+                      depth = max(0, depth - 1)
+                  elif char == ',' and depth == 0:
+                      split = index
+                      break
+              if split is None:
+                  return value
+              important = value.rstrip().endswith('!important')
+              first = value[:split].rstrip()
+              if important and not first.endswith('!important'):
+                  first += ' !important'
+              return first
+
+          themes = sorted(Path('core/themes').glob('Fedora-Nova-*/gnome-shell/gnome-shell.css'))
+          if len(themes) != 5:
+              raise SystemExit(f'expected 5 themes, got {len(themes)}')
+
+          total = 0
+          for path in themes:
+              text = path.read_text(encoding='utf-8')
+              old_family = 'font-family: "Inter", "Adwaita Sans", sans-serif;'
+              if text.count(old_family) != 1:
+                  raise SystemExit(f'{path}: expected one quoted stage font family, got {text.count(old_family)}')
+              text = text.replace(old_family, 'font-family: Inter, Adwaita Sans, sans-serif;', 1)
+
+              def replace_shadow(match):
+                  global total
+                  value = match.group(2)
+                  reduced = first_shadow(value)
+                  if reduced == value:
+                      return match.group(0)
+                  total += 1
+                  return match.group(1) + reduced + match.group(3)
+
+              text = SHADOW_RE.sub(replace_shadow, text)
+              path.write_text(text, encoding='utf-8')
+
+          print(f'Reduced {total} shipped-theme multi-shadow declarations')
+          if total == 0:
+              raise SystemExit('expected at least one shipped multi-shadow declaration')
+          PY
+
+      - name: Validate minimized parser fix
+        run: |
+          ./check.sh
+          python3 -m unittest -v tests.test_shell_theme_st_compat
+          git diff --stat origin/development -- core/themes core/themes-src/scss/layers/_hover-circle.scss
+
+      - name: Commit correction and remove one-shot workflow
+        run: |
+          rm -f .github/workflows/one-shot-minimize-theme-parser-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(shell): minimize St parser compatibility delta [parser-delta-minimized]'
+          git push origin HEAD:fix/shell-preview-stability
