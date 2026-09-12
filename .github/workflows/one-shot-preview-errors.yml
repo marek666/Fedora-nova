@@ -1,0 +1,145 @@
+name: One-shot Shell theme parser fix
+
+on:
+  push:
+    branches:
+      - fix/shell-preview-stability
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[preview-errors-patched]') }}
+    runs-on: ubuntu-latest
+    container: fedora:44
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/shell-preview-stability
+          fetch-depth: 0
+
+      - name: Install patch dependencies
+        run: dnf install -y git python3 sassc
+
+      - name: Remove St-incompatible theme syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          hover = Path('core/themes-src/scss/layers/_hover-circle.scss')
+          text = hover.read_text(encoding='utf-8')
+          replacements = {
+              '''  box-shadow:\n    0 0 0 10px nova-rgba(accent, 0.15),\n    inset 0 0 0 2px nova-rgba(accent, 0.62),\n    inset 0 0 0 3px nova-rgba(secondary, 0.12) !important;''':
+              '''  box-shadow: 0 0 0 10px nova-rgba(accent, 0.15) !important;''',
+              '''  box-shadow:\n    0 0 0 5px nova-rgba(accent, 0.17),\n    inset 0 0 0 2px nova-rgba(accent, 0.68),\n    inset 0 0 0 3px nova-rgba(secondary, 0.14) !important;''':
+              '''  box-shadow: 0 0 0 5px nova-rgba(accent, 0.17) !important;''',
+              '''  box-shadow:\n    0 0 0 5px nova-rgba(accent, 0.17),\n    inset 0 0 0 2px nova-rgba(accent, 0.68) !important;''':
+              '''  box-shadow: 0 0 0 5px nova-rgba(accent, 0.17) !important;''',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected exactly one hover shadow block, got {text.count(old)}: {old!r}')
+              text = text.replace(old, new)
+          hover.write_text(text, encoding='utf-8')
+          PY
+
+          ./core/scripts/build-theme-sass.sh --apply
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          theme_files = sorted(Path('core/themes').glob('Fedora-Nova-*/gnome-shell/gnome-shell.css'))
+          if len(theme_files) != 5:
+              raise SystemExit(f'expected 5 shipped themes, got {len(theme_files)}')
+
+          old_family = 'font-family: "Inter", "Adwaita Sans", sans-serif;'
+          new_family = 'font-family: Inter, Adwaita Sans, sans-serif;'
+          for path in theme_files:
+              text = path.read_text(encoding='utf-8')
+              if text.count(old_family) != 1:
+                  raise SystemExit(f'{path}: expected one St-incompatible font-family, got {text.count(old_family)}')
+              path.write_text(text.replace(old_family, new_family), encoding='utf-8')
+
+          tech = Path('core/themes/Fedora-Nova-Tech/gnome-shell/gnome-shell.css')
+          text = tech.read_text(encoding='utf-8')
+          old_shadow = '''  box-shadow: 0 0 0 55px rgba(46, 216, 232, 0.68), inset 0 0 0 50px rgba(96, 64, 110, 0.78) !important;'''
+          if text.count(old_shadow) != 1:
+              raise SystemExit(f'Tech static halo: expected one multi-shadow, got {text.count(old_shadow)}')
+          text = text.replace(old_shadow, '  box-shadow: 0 0 0 55px rgba(46, 216, 232, 0.68) !important;')
+          tech.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Add St compatibility regression
+        run: |
+          cat > tests/test_shell_theme_st_compat.py <<'PY'
+          import re
+          from pathlib import Path
+          import unittest
+
+          REPO = Path(__file__).resolve().parents[1]
+          THEMES = REPO / 'core/themes'
+          HOVER_SCSS = REPO / 'core/themes-src/scss/layers/_hover-circle.scss'
+
+          COMMENT_RE = re.compile(r'/\*.*?\*/', re.S)
+          SHADOW_RE = re.compile(r'box-shadow\s*:\s*([^;]+);', re.S)
+
+          def strip_comments(text: str) -> str:
+              return COMMENT_RE.sub('', text)
+
+          def has_top_level_comma(value: str) -> bool:
+              depth = 0
+              for char in value:
+                  if char == '(':
+                      depth += 1
+                  elif char == ')':
+                      depth = max(0, depth - 1)
+                  elif char == ',' and depth == 0:
+                      return True
+              return False
+
+          class ShellThemeStCompatibility(unittest.TestCase):
+              def shipped_theme_files(self):
+                  files = sorted(THEMES.glob('Fedora-Nova-*/gnome-shell/gnome-shell.css'))
+                  self.assertEqual(len(files), 5)
+                  return files
+
+              def test_stage_font_family_uses_st_compatible_tokens(self):
+                  expected = 'font-family: Inter, Adwaita Sans, sans-serif;'
+                  for path in self.shipped_theme_files():
+                      with self.subTest(theme=path.parts[-3]):
+                          text = strip_comments(path.read_text(encoding='utf-8'))
+                          self.assertIn(expected, text)
+                          self.assertNotIn('font-family: "Inter", "Adwaita Sans", sans-serif;', text)
+
+              def test_shipped_themes_use_single_st_shadow(self):
+                  for path in self.shipped_theme_files():
+                      text = strip_comments(path.read_text(encoding='utf-8'))
+                      bad = [match.group(1).strip() for match in SHADOW_RE.finditer(text)
+                             if has_top_level_comma(match.group(1))]
+                      with self.subTest(theme=path.parts[-3]):
+                          self.assertEqual(bad, [])
+
+              def test_generated_hover_source_uses_single_st_shadow(self):
+                  text = strip_comments(HOVER_SCSS.read_text(encoding='utf-8'))
+                  bad = [match.group(1).strip() for match in SHADOW_RE.finditer(text)
+                         if has_top_level_comma(match.group(1))]
+                  self.assertEqual(bad, [])
+
+          if __name__ == '__main__':
+              unittest.main()
+          PY
+
+      - name: Validate parser fix
+        run: |
+          ./check.sh
+          python3 -m unittest discover -s tests -p 'test_shell_theme_st_compat.py' -v
+
+      - name: Commit parser fix and remove one-shot workflow
+        run: |
+          rm -f .github/workflows/one-shot-preview-errors.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add core/themes core/themes-src/scss/layers/_hover-circle.scss tests/test_shell_theme_st_compat.py .github/workflows/one-shot-preview-errors.yml
+          git commit -m 'fix(shell): remove St parser warnings [preview-errors-patched]'
+          git push origin HEAD:fix/shell-preview-stability
