@@ -426,9 +426,15 @@ class Lifecycle(unittest.TestCase):
         s = Session(self.snapshot, self.binary, symlink=True)
         try:
             self.css.write_text('/* missing markers */')
-            wait_for(lambda: (s.runtime / 'shell.pid').exists() and (s.runtime / 'shell.pid').read_text().strip() not in ['', str(s.shell)], 35)
-            wait_for(lambda: (s.runtime / 'watcher.pgid').exists())
-            s.groups.add(int((s.runtime / 'session.pgid').read_text())); s.groups.add(int((s.runtime / 'watcher.pgid').read_text()))
+            # The fallback must not launch a theme that also fails the shared
+            # startup build. Exit cleanly with a diagnostic instead.
+            s.p.wait(timeout=35)
+            self.assertNotEqual(s.p.returncode, 0)
+            self.assertIn('marker', (s.root / 'output.log').read_text().lower())
+            self.assertFalse(any(members(g) for g in s.groups))
+        finally: s.close(); self.css.write_bytes(self.original)
+        s = Session(self.snapshot, self.binary, symlink=True)
+        try:
             (s.root / 'close').touch(); s.p.wait(timeout=15)
             self.assertEqual(s.p.returncode, 0)
             self.assertFalse(any(members(g) for g in s.groups))
@@ -449,6 +455,7 @@ class Lifecycle(unittest.TestCase):
             for kind in ['inotify', 'poll']:
                 s = Session(self.snapshot, self.binary, kind)
                 try:
+                    (s.root / 'sass-paused').unlink(missing_ok=True)
                     (s.root / 'pause-sass').touch()
                     self.dirty(); wait_for(lambda: (s.root / 'sass-paused').exists())
                     profiles.write_bytes(original_profiles + b'\n')

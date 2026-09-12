@@ -8,6 +8,11 @@ Keep `app/` and `core/` together so one revision describes the complete preview.
 The following relationships were verified against local refs; fetch and check
 the remote refs again before merging.
 
+Remote refs were fetched during this integration. GTK3 commit `bb3b6d3` has
+now been merged without conflicts as `c317a04` on
+`fix/preview-reload-persistence`, after startup-source fix `f04d823`.
+The table below records the starting points, not additional merges to perform.
+
 | Branch | Role and integration |
 | --- | --- |
 | `development` (`40568ad`) | Next-release integration base |
@@ -18,7 +23,7 @@ the remote refs again before merging.
 
 Do not merge the stability and reload branches again or copy files between
 working directories. Submit the tested integration candidate to `development`,
-then review the GTK3 branch against that updated base. Keep `main` for releases.
+with the GTK3 merge included. Keep `main` for releases.
 Retain old branches until integration and the interactive smoke checks pass.
 
 ## Daily development
@@ -44,6 +49,9 @@ Use `--reset-settings` deliberately if clean profile defaults are needed.
 
 Generated staging output stays outside tracked runtime themes. Compile release
 theme output intentionally with `core/scripts/build-theme-sass.sh --apply`.
+Startup now requires a Sass compiler, just like live reload. Invalid source
+markers or compilation errors also stop a fallback restart with a diagnostic;
+the launcher no longer starts the checked-in theme while ignoring those errors.
 
 ## Delivery sequence
 
