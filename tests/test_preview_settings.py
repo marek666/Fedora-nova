@@ -71,3 +71,27 @@ class PreviewSettingsPersistence(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ShellPreviewPersistenceWiring(unittest.TestCase):
+    def setUp(self):
+        self.script = (REPO / 'dev-shell-preview.sh').read_text(encoding='utf-8')
+
+    def test_preview_script_exposes_reset_and_persistence(self):
+        self.assertIn('--reset-settings', self.script)
+        self.assertIn('preview_settings.py', self.script)
+        self.assertIn('save-current --preview-root "$PREVIEW_ROOT"', self.script)
+        self.assertIn('restore --preview-root "$PREVIEW_ROOT" --profile "$PROFILE"', self.script)
+        self.assertIn('NOVA_PREVIEW_RESTORE_SETTINGS', self.script)
+
+    def test_restored_session_does_not_reseed_user_preferences(self):
+        guard = 'if [[ "${NOVA_PREVIEW_RESTORE_SETTINGS:-0}" != "1" ]]; then'
+        self.assertIn(guard, self.script)
+        start = self.script.index(guard)
+        end = self.script.index('\nfi\n\nif gsettings writable org.gnome.shell welcome-dialog-last-shown-version', start)
+        guarded = self.script[start:end]
+        self.assertIn('org.gnome.desktop.interface accent-color', guarded)
+        self.assertIn('org.gnome.mutter dynamic-workspaces', guarded)
+        self.assertIn('org.gnome.shell.extensions.dash-to-dock dock-position', guarded)
+        after = self.script[end:]
+        self.assertIn('org.gnome.shell enabled-extensions', after)
+        self.assertIn('org.gnome.shell.extensions.user-theme name', after)

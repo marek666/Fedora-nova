@@ -47,6 +47,7 @@ CORE="$ROOT/core"
 PROFILE="tech"
 WATCH=0
 STOP=0
+RESET_SETTINGS=0
 
 ORIGINAL_HOME="${HOME:?}"
 ORIGINAL_HOME_REAL="$(readlink -m -- "$ORIGINAL_HOME")"
@@ -74,6 +75,7 @@ WATCHER_PID_FILE="$RUNTIME_DIR/watcher.pid"
 WATCHER_PGID_FILE="$RUNTIME_DIR/watcher.pgid"
 WATCH_RESULT_FILE="$RUNTIME_DIR/watch-result.json"
 PREVIEW_RELOAD_HELPER="$CORE/scripts/preview_reload.py"
+PREVIEW_SETTINGS_HELPER="$CORE/scripts/preview_settings.py"
 
 PREVIEW_XDG_DATA_DIRS=""
 SHELL_PID=""
@@ -81,6 +83,7 @@ SHELL_PGID=""
 SHELL_CHILD_PID=""
 WATCH_PID=""
 WATCH_PGID=""
+PREVIEW_RESTORE_SETTINGS=0
 CLEANUP_DONE=0
 
 is_bootstrap_fd() {
@@ -132,13 +135,15 @@ usage() {
 Fedora Nova Shell Preview
 
 Usage:
-  ./dev-shell-preview.sh [--watch] [PROFILE]
+  ./dev-shell-preview.sh [--watch] [--reset-settings] [PROFILE]
   ./dev-shell-preview.sh [PROFILE] --watch
+  ./dev-shell-preview.sh --reset-settings [PROFILE]
   ./dev-shell-preview.sh --stop
 
 Examples:
   ./dev-shell-preview.sh tech
   ./dev-shell-preview.sh --watch tech
+  ./dev-shell-preview.sh --reset-settings tech
   ./dev-shell-preview.sh --stop
 
 The preview runs in an isolated HOME, XDG and D-Bus session. In --watch mode
@@ -150,6 +155,7 @@ USAGE
 while (($#)); do
   case "$1" in
     --watch|-w) WATCH=1 ;;
+    --reset-settings) RESET_SETTINGS=1 ;;
     --stop) STOP=1 ;;
     -h|--help) usage; exit 0 ;;
     *) PROFILE="$1" ;;
@@ -541,6 +547,10 @@ stop_external_preview() {
     return "$session_rc"
   fi
 
+  if [[ -f "$PREVIEW_SETTINGS_HELPER" ]] && ! python3 "$PREVIEW_SETTINGS_HELPER" save-current --preview-root "$PREVIEW_ROOT" >/dev/null; then
+    echo "VAROVÁNÍ: preview nastavení se nepodařilo uložit." >&2
+  fi
+
   rm -rf "$LIVE_LOCK_DIR"
   rm -f "$SUPERVISOR_PID_FILE" "$TOKEN_FILE" "$WATCH_RESULT_FILE"
   echo "Shell Preview zastaveno."
@@ -580,6 +590,10 @@ PROFILE_JSON="$CORE/config/profiles.json"
 }
 [[ -f "$PREVIEW_RELOAD_HELPER" ]] || {
   echo "CHYBA: chybí $PREVIEW_RELOAD_HELPER" >&2
+  exit 1
+}
+[[ -f "$PREVIEW_SETTINGS_HELPER" ]] || {
+  echo "CHYBA: chybí $PREVIEW_SETTINGS_HELPER" >&2
   exit 1
 }
 
@@ -761,6 +775,18 @@ PY
 }
 
 prepare_preview_root() {
+  local restore_result=""
+
+  # Save the last clean/stale preview database before rebuilding the transient roots.
+  if [[ -d "$PREVIEW_CONFIG" ]]; then
+    if ! python3 "$PREVIEW_SETTINGS_HELPER" save-current --preview-root "$PREVIEW_ROOT" >/dev/null; then
+      echo "VAROVÁNÍ: předchozí preview nastavení se nepodařilo uložit." >&2
+    fi
+  fi
+  if [[ "$RESET_SETTINGS" -eq 1 ]]; then
+    python3 "$PREVIEW_SETTINGS_HELPER" reset --preview-root "$PREVIEW_ROOT" --profile "$PROFILE" >/dev/null || return $?
+  fi
+
   python3 "$CORE/scripts/theme_hot_reload.py" --archive-recovery \
     --preview-data "$PREVIEW_DATA" --preview-state "$PREVIEW_STATE" \
     --runtime-dir "$RUNTIME_DIR" || return $?
@@ -778,6 +804,15 @@ prepare_preview_root() {
     "$PREVIEW_STATE" \
     "$RUNTIME_DIR"
   chmod 700 "$PREVIEW_HOME" "$RUNTIME_DIR"
+
+  restore_result="$(python3 "$PREVIEW_SETTINGS_HELPER" restore --preview-root "$PREVIEW_ROOT" --profile "$PROFILE")" || return $?
+  if [[ "$restore_result" == "restored" ]]; then
+    PREVIEW_RESTORE_SETTINGS=1
+  else
+    PREVIEW_RESTORE_SETTINGS=0
+  fi
+  # A reset request applies to the first rebuild only; watcher fallbacks preserve new changes.
+  RESET_SETTINGS=0
 
   prepare_host_exports
 
@@ -867,6 +902,7 @@ export_preview_env() {
   export NOVA_PREVIEW_DOCK_COLOR="$DOCK_COLOR"
   export NOVA_PREVIEW_DOCK_OPACITY="$DOCK_OPACITY"
   export NOVA_PREVIEW_DOCK_SIZE="$DOCK_SIZE"
+  export NOVA_PREVIEW_RESTORE_SETTINGS="$PREVIEW_RESTORE_SETTINGS"
   export NOVA_PREVIEW_SHELL_PID_FILE="$SHELL_CHILD_PID_FILE"
 }
 
@@ -879,6 +915,11 @@ print_banner() {
   echo "Wallpaper:   $WALLPAPER"
   echo "Izolace:     $PREVIEW_ROOT"
   echo "Home:        izolovaný"
+  if [[ "$PREVIEW_RESTORE_SETTINGS" -eq 1 ]]; then
+    echo "Settings:    obnovené pro profil $PROFILE"
+  else
+    echo "Settings:    čisté výchozí pro profil $PROFILE"
+  fi
   if [[ $WATCH -eq 1 ]]; then
     echo "Live:        smart watch (inotify + polling fallback, full-restart apply)"
   fi
@@ -902,33 +943,38 @@ rm -f "$NOVA_PREVIEW_SHELL_PID_FILE"
   chmod 600 "$NOVA_PREVIEW_SHELL_PID_FILE"
 )
 
-gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" || true
-gsettings set org.gnome.desktop.interface accent-color "$NOVA_PREVIEW_ACCENT" || true
-gsettings set org.gnome.desktop.interface icon-theme "$NOVA_PREVIEW_ICON_THEME" || true
-gsettings set org.gnome.desktop.background picture-uri "file://$NOVA_PREVIEW_WALL" || true
-gsettings set org.gnome.desktop.background picture-uri-dark "file://$NOVA_PREVIEW_WALL" || true
-gsettings set org.gnome.desktop.background picture-options "zoom" || true
+if [[ "${NOVA_PREVIEW_RESTORE_SETTINGS:-0}" != "1" ]]; then
+  gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" || true
+  gsettings set org.gnome.desktop.interface accent-color "$NOVA_PREVIEW_ACCENT" || true
+  gsettings set org.gnome.desktop.interface icon-theme "$NOVA_PREVIEW_ICON_THEME" || true
+  gsettings set org.gnome.desktop.background picture-uri "file://$NOVA_PREVIEW_WALL" || true
+  gsettings set org.gnome.desktop.background picture-uri-dark "file://$NOVA_PREVIEW_WALL" || true
+  gsettings set org.gnome.desktop.background picture-options "zoom" || true
+  gsettings set org.gnome.mutter center-new-windows true || true
+  gsettings set org.gnome.mutter dynamic-workspaces true || true
+  gsettings set org.gnome.mutter edge-tiling true || true
+  gsettings set org.gnome.mutter workspaces-only-on-primary false || true
+
+  if gsettings writable org.gnome.shell.extensions.dash-to-dock dock-position >/dev/null 2>&1; then
+    gsettings set org.gnome.shell.extensions.dash-to-dock dock-position "BOTTOM" || true
+    gsettings set org.gnome.shell.extensions.dash-to-dock extend-height false || true
+    gsettings set org.gnome.shell.extensions.dash-to-dock dash-max-icon-size "$NOVA_PREVIEW_DOCK_SIZE" || true
+    gsettings set org.gnome.shell.extensions.dash-to-dock transparency-mode "FIXED" || true
+    gsettings set org.gnome.shell.extensions.dash-to-dock custom-background-color true || true
+    gsettings set org.gnome.shell.extensions.dash-to-dock background-color "$NOVA_PREVIEW_DOCK_COLOR" || true
+    gsettings set org.gnome.shell.extensions.dash-to-dock background-opacity "$NOVA_PREVIEW_DOCK_OPACITY" || true
+  fi
+fi
+
 if gsettings writable org.gnome.shell welcome-dialog-last-shown-version >/dev/null 2>&1; then
   shell_version="$(gnome-shell --version 2>/dev/null | awk "{print \$NF}")"
   gsettings set org.gnome.shell welcome-dialog-last-shown-version "${shell_version:-999.0}" || true
 fi
 
+# These are preview invariants rather than user preferences: keep the nested
+# session on the requested Nova theme and required extension set after restore.
 gsettings set org.gnome.shell enabled-extensions "$NOVA_PREVIEW_EXTENSIONS"
 gsettings set org.gnome.shell.extensions.user-theme name "$NOVA_PREVIEW_THEME"
-gsettings set org.gnome.mutter center-new-windows true || true
-gsettings set org.gnome.mutter dynamic-workspaces true || true
-gsettings set org.gnome.mutter edge-tiling true || true
-gsettings set org.gnome.mutter workspaces-only-on-primary false || true
-
-if gsettings writable org.gnome.shell.extensions.dash-to-dock dock-position >/dev/null 2>&1; then
-  gsettings set org.gnome.shell.extensions.dash-to-dock dock-position "BOTTOM" || true
-  gsettings set org.gnome.shell.extensions.dash-to-dock extend-height false || true
-  gsettings set org.gnome.shell.extensions.dash-to-dock dash-max-icon-size "$NOVA_PREVIEW_DOCK_SIZE" || true
-  gsettings set org.gnome.shell.extensions.dash-to-dock transparency-mode "FIXED" || true
-  gsettings set org.gnome.shell.extensions.dash-to-dock custom-background-color true || true
-  gsettings set org.gnome.shell.extensions.dash-to-dock background-color "$NOVA_PREVIEW_DOCK_COLOR" || true
-  gsettings set org.gnome.shell.extensions.dash-to-dock background-opacity "$NOVA_PREVIEW_DOCK_OPACITY" || true
-fi
 
 exec gnome-shell --devkit --wayland
 '
@@ -1012,6 +1058,9 @@ stop_shell() {
   if stop_recorded_session; then
     if is_pid "$wait_pid"; then
       wait "$wait_pid" 2>/dev/null || true
+    fi
+    if ! python3 "$PREVIEW_SETTINGS_HELPER" save-current --preview-root "$PREVIEW_ROOT" >/dev/null; then
+      echo "VAROVÁNÍ: preview nastavení se nepodařilo uložit." >&2
     fi
     SHELL_PID=""
     SHELL_PGID=""
