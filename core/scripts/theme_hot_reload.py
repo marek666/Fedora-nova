@@ -5,7 +5,6 @@ import re
 import sys
 
 import theme_hot_reload_core as _core
-from theme_hot_reload_core import *
 
 USER_THEME_UUID = "user-theme@gnome-shell-extensions.gcampax.github.com"
 _EXTENSION_API_MISSING = (
@@ -99,8 +98,11 @@ def _set_theme_with_shell_reload(self, name: str, *, rollback: bool = False):
 
 
 _core.ShellIdentity.set_theme = _set_theme_with_shell_reload
-ShellIdentity = _core.ShellIdentity
 
-
+# When imported by preview_reload/tests, expose the implementation module itself
+# so monkeypatches keep affecting the globals used by its functions. When run as
+# a script, execute the patched implementation directly.
 if __name__ == "__main__":
     raise SystemExit(_core.main())
+
+sys.modules[__name__] = _core
