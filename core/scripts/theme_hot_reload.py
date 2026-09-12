@@ -18,7 +18,7 @@ _EXTENSION_API_MISSING = (
 _original_set_theme = _core.ShellIdentity.set_theme
 
 
-def _toggle_user_theme_extension(self, method: str, *, rollback: bool = False) -> bool:
+def _extension_call(self, method: str, *, rollback: bool = False) -> str | None:
     """Synchronously disable/enable User Themes inside the verified nested Shell.
 
     GNOME's User Themes extension calls Main.loadTheme() from disable()/enable().
@@ -41,7 +41,7 @@ def _toggle_user_theme_extension(self, method: str, *, rollback: bool = False) -
         "--object-path",
         "/org/gnome/Shell",
         "--method",
-        f"org.gnome.Shell.Extensions.{method}Extension",
+        f"org.gnome.Shell.Extensions.{method}",
         "--timeout",
         "1" if rollback else "3",
         USER_THEME_UUID,
@@ -56,15 +56,23 @@ def _toggle_user_theme_extension(self, method: str, *, rollback: bool = False) -
     except _core.HotReloadError as exc:
         text = str(exc)
         if any(marker in text for marker in _EXTENSION_API_MISSING):
-            return False
+            return None
         raise
+
+    self.verify(rollback=rollback)
+    return raw.strip()
+
+
+def _toggle_user_theme_extension(self, method: str, *, rollback: bool = False) -> bool:
+    raw = _extension_call(self, f"{method}Extension", rollback=rollback)
+    if raw is None:
+        return False
 
     if not re.fullmatch(r"\(true,\)", raw.strip()):
         raise _core.HotReloadError(
             f"User Themes {method.lower()} request was rejected: {raw or 'empty response'}"
         )
 
-    self.verify(rollback=rollback)
     return True
 
 
@@ -74,6 +82,16 @@ def _set_theme_with_shell_reload(self, name: str, *, rollback: bool = False):
     # synchronous extension disable/enable calls. The configured theme name is
     # intentionally left unchanged while the extension is disabled.
     if name == "":
+        raw = _extension_call(self, "GetExtensionInfo", rollback=rollback)
+        if raw is not None:
+            state = re.search(r"['\"]state['\"]:\s*<(?:uint32 )?(\d+)(?:\.0)?>", raw)
+            if state is None:
+                raise _core.HotReloadError("cannot determine User Themes extension state")
+            # Never re-enable a theme extension the user deliberately disabled.
+            # Update its files now; it will load them if enabled later.
+            self._skip_user_theme_reload = int(state.group(1)) != 1
+            if self._skip_user_theme_reload:
+                return
         if _toggle_user_theme_extension(self, "Disable", rollback=rollback):
             if not rollback:
                 print(
@@ -82,6 +100,10 @@ def _set_theme_with_shell_reload(self, name: str, *, rollback: bool = False):
                 )
             return
     elif name == self.theme:
+        if getattr(self, "_skip_user_theme_reload", False):
+            if not rollback:
+                print("Theme CSS updated; User Themes remains inactive by user choice.", file=sys.stderr)
+            return
         if _toggle_user_theme_extension(self, "Enable", rollback=rollback):
             if self.get_theme(rollback=rollback) != self.theme:
                 raise _core.HotReloadError(

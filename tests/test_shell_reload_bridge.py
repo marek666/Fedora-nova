@@ -30,15 +30,17 @@ class ShellReloadBridgeTests(unittest.TestCase):
 
         def run_checked(command, **_kwargs):
             calls.append(command)
+            if 'org.gnome.Shell.Extensions.GetExtensionInfo' in command:
+                return "({'state': <1.0>},)"
             return '(true,)'
 
         with patch.object(hot, 'run_checked', side_effect=run_checked):
             hot.ShellIdentity.set_theme(identity, '')
             hot.ShellIdentity.set_theme(identity, identity.theme)
 
-        self.assertEqual(len(calls), 2)
-        self.assertIn('org.gnome.Shell.Extensions.DisableExtension', calls[0])
-        self.assertIn('org.gnome.Shell.Extensions.EnableExtension', calls[1])
+        self.assertEqual(len(calls), 3)
+        self.assertIn('org.gnome.Shell.Extensions.DisableExtension', calls[1])
+        self.assertIn('org.gnome.Shell.Extensions.EnableExtension', calls[2])
         for command in calls:
             self.assertIn('--address', command)
             self.assertIn(identity.address, command)
@@ -46,6 +48,22 @@ class ShellReloadBridgeTests(unittest.TestCase):
             self.assertIn('org.gnome.Shell', command)
             self.assertIn('user-theme@gnome-shell-extensions.gcampax.github.com', command)
         self.assertGreaterEqual(identity.verified, 4)
+
+    def test_user_disabled_theme_stays_disabled_including_rollback(self):
+        identity = FakeIdentity()
+        with patch.object(hot, 'run_checked', return_value="({'state': <2.0>},)") as run:
+            hot.ShellIdentity.set_theme(identity, '')
+            hot.ShellIdentity.set_theme(identity, identity.theme)
+            hot.ShellIdentity.set_theme(identity, identity.theme, rollback=True)
+        self.assertEqual(run.call_count, 1)
+        self.assertIn('org.gnome.Shell.Extensions.GetExtensionInfo', run.call_args.args[0])
+
+    def test_rejected_disable_raises_and_rollback_can_enable(self):
+        identity = FakeIdentity()
+        with patch.object(hot, 'run_checked', side_effect=["({'state': <1.0>},)", '(false,)', '(true,)']):
+            with self.assertRaises(hot.HotReloadError):
+                hot.ShellIdentity.set_theme(identity, '')
+            hot.ShellIdentity.set_theme(identity, identity.theme, rollback=True)
 
 
 if __name__ == '__main__':

@@ -3,6 +3,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import shutil
+import subprocess
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "core/scripts"))
@@ -43,6 +45,41 @@ class PreviewSettingsPersistence(unittest.TestCase):
         profile.write_text("pulse\n", encoding="utf-8")
         self.assertEqual(settings.save_current(self.root), "saved")
         self.assertEqual((self.root / "persist/settings/pulse/dconf/user").read_bytes(), b"recorded-state")
+
+    def test_nova_choices_and_custom_profiles_survive_rebuild(self):
+        self.write_dconf()
+        nova = self.root / 'config/fedora-nova'
+        (nova / 'custom-profiles').mkdir(parents=True)
+        choices = {'current-profile': 'tech', 'current-curve': 'classic',
+                   'current-hover': 'none', 'current-icons': 'system', 'current-gtk': 'off',
+                   'custom-profiles/personal.json': '{"title": "Personal"}'}
+        for name, value in choices.items():
+            (nova / name).write_text(value)
+        self.assertEqual(settings.save_current(self.root), 'saved')
+        shutil.rmtree(self.root / 'config')
+        self.assertEqual(settings.restore(self.root, 'tech'), 'restored')
+        for name, value in choices.items():
+            self.assertEqual((nova / name).read_text(), value)
+
+    def test_nova_only_snapshot_still_needs_gnome_defaults(self):
+        nova = self.root / 'config/fedora-nova'
+        nova.mkdir(parents=True)
+        (nova / 'current-hover').write_text('none')
+        settings.save(self.root, 'tech')
+        shutil.rmtree(self.root / 'config')
+        self.assertEqual(settings.restore(self.root, 'tech'), 'fresh')
+        self.assertEqual((nova / 'current-hover').read_text(), 'none')
+
+    def test_linked_persisted_profile_is_rejected(self):
+        outside = Path(self.tmp.name) / 'outside'
+        (outside / 'dconf').mkdir(parents=True)
+        (outside / 'dconf/user').write_bytes(b'outside')
+        persist = self.root / 'persist/settings'
+        persist.mkdir(parents=True)
+        (persist / 'tech').symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(settings.PreviewSettingsError):
+            settings.restore(self.root, 'tech')
+        self.assertFalse((self.root / 'config').exists())
 
     def test_reset_only_removes_requested_profile(self):
         for profile, value in (("tech", b"a"), ("clean", b"b")):
@@ -92,6 +129,49 @@ class ShellPreviewPersistenceWiring(unittest.TestCase):
         self.assertIn('org.gnome.desktop.interface accent-color', guarded)
         self.assertIn('org.gnome.mutter dynamic-workspaces', guarded)
         self.assertIn('org.gnome.shell.extensions.dash-to-dock dock-position', guarded)
+        self.assertIn('org.gnome.shell enabled-extensions', guarded)
         after = self.script[end:]
-        self.assertIn('org.gnome.shell enabled-extensions', after)
+        self.assertNotIn('org.gnome.shell enabled-extensions', after)
         self.assertIn('org.gnome.shell.extensions.user-theme name', after)
+
+
+@unittest.skipUnless(os.environ.get('NOVA_LIFECYCLE_TESTS') == '1', 'opt-in private D-Bus/dconf test')
+class RealDconfPersistence(unittest.TestCase):
+    def test_settings_and_extension_choices_survive_actual_session_startup(self):
+        with tempfile.TemporaryDirectory(prefix='nova-dconf-test-') as tmp:
+            root = Path(tmp)
+            runtime = root / 'runtime'
+            runtime.mkdir(mode=0o700)
+            nova = root / 'config/fedora-nova'
+            nova.mkdir(parents=True)
+            (nova / 'current-profile').write_text('tech')
+            (nova / 'current-hover').write_text('none')
+            env = {**os.environ, 'HOME': str(root / 'home'),
+                   'XDG_CONFIG_HOME': str(root / 'config'), 'XDG_RUNTIME_DIR': str(runtime),
+                   'GSETTINGS_BACKEND': 'dconf', 'NOVA_PREVIEW_RESTORE_SETTINGS': '1',
+                   'NOVA_PREVIEW_SHELL_PID_FILE': str(root / 'shell.pid'),
+                   'NOVA_PREVIEW_THEME': 'Fedora-Nova-Tech',
+                   'NOVA_PREVIEW_EXTENSIONS': "['user-theme@gnome-shell-extensions.gcampax.github.com']"}
+            def session(script):
+                result = subprocess.run(['dbus-run-session', '--', 'bash', '-ec', script],
+                                        env=env, capture_output=True, text=True, timeout=15)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return result.stdout.strip()
+            session('gsettings set org.gnome.mutter dynamic-workspaces false\n'
+                    'gsettings set org.gnome.shell.extensions.dash-to-dock dock-position LEFT\n'
+                    'gsettings set org.gnome.shell.extensions.dash-to-dock dash-max-icon-size 64\n'
+                    'gsettings set org.gnome.shell enabled-extensions "[]"')
+            self.assertEqual(settings.save_current(root), 'saved')
+            shutil.rmtree(root / 'config')
+            self.assertEqual(settings.restore(root, 'tech'), 'restored')
+            script = (REPO / 'dev-shell-preview.sh').read_text()
+            startup = script.split("SESSION_SCRIPT='\n", 1)[1].split("\n'\n", 1)[0]
+            self.assertTrue(startup.endswith('exec gnome-shell --devkit --wayland'))
+            startup = startup.removesuffix('exec gnome-shell --devkit --wayland')
+            result = session(startup + '\n'
+                             'gsettings get org.gnome.mutter dynamic-workspaces\n'
+                             'gsettings get org.gnome.shell.extensions.dash-to-dock dock-position\n'
+                             'gsettings get org.gnome.shell.extensions.dash-to-dock dash-max-icon-size\n'
+                             'gsettings get org.gnome.shell enabled-extensions')
+            self.assertEqual(result.splitlines(), ['false', "'LEFT'", '64', '@as []'])
+            self.assertEqual((nova / 'current-hover').read_text(), 'none')

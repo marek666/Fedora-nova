@@ -203,8 +203,37 @@ the explicitly selected helper.
 The watch mode supports selective theme hot reload. Changes that cannot be
 safely applied live fall back to a full nested Shell restart.
 
+CSS/Sass changes use the User Themes extension API inside the verified preview
+Shell. GTK refresh respects the saved on/off choice. Disabling User Themes
+keeps it disabled even when CSS files change. Default circle hover uses matching
+Python (startup) and Sass (reload) styling; non-default modes use the Python
+renderer during reload too.
+
+Settings persist per profile: both dconf (Mutter, dock and extension choices)
+and `config/fedora-nova` (hover, curves, GTK, icon choice and custom profiles).
+`--reset-settings tech` resets only that preview profile. The explicitly requested
+profile still selects the Nova theme; it does not force extensions back on.
+
+The nested Shell has a private `session-runtime` directory. The Devkit window
+retains the parent Wayland and PipeWire connections, without sharing GNOME's
+runtime marker files. This is a development preview, not an application security
+sandbox.
+
 The Shell Preview runtime and lock are intentionally shared between worktrees,
 so the preview behaves as a single development session.
+
+To review a worktree alongside the usual preview, use a separate cache root for
+both start and stop:
+
+```bash
+XDG_CACHE_HOME=/tmp/fedora-nova-preview-test ./dev-shell-preview.sh --watch tech
+XDG_CACHE_HOME=/tmp/fedora-nova-preview-test ./dev-shell-preview.sh --stop
+```
+
+Check a CSS edit without a Shell PID change, then change a dock preference and a
+Nova hover/GTK choice and close/reopen the same preview. Those choices should
+remain. Config/extension code changes may restart the preview; CSS edits should
+not. The test cache above is temporary and may be cleared on reboot.
 
 ## Builder, native and Shell responsibilities
 

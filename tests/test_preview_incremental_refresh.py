@@ -86,6 +86,17 @@ class IncrementalGtkRefresh(unittest.TestCase):
         self.assertEqual(calls, ['theme', 'gtk'])
         self.assertIn('GTK preview layer refreshed', err.getvalue())
 
+    def test_refresh_does_not_turn_disabled_gtk_layer_back_on(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            choice = root / 'fedora-nova/current-gtk'
+            choice.parent.mkdir()
+            choice.write_text('off\n')
+            with patch.dict(os.environ, {'XDG_CONFIG_HOME': str(root)}), \
+                 patch.object(hot, 'run_checked') as run:
+                watch._run_gtk_refresh(REPO)
+            self.assertEqual(run.call_args.args[0][-1], 'off')
+
 
 if __name__ == '__main__':
     unittest.main()
