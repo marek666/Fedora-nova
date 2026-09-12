@@ -169,6 +169,13 @@ def dock_reset(dock: str, border: str) -> str:
   border-color: rgba({br}, {bg}, {bb}, 0.82) !important;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.34) !important;
 }}
+
+{dock_icon_reset} {{
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}}
 '''.strip()
 
 
@@ -181,12 +188,7 @@ def common_reset(dock: str, border: str) -> str:
 .overview-tile:selected,
 .overview-tile:active,
 .overview-tile:checked,
-.overview-tile:outlined {{
-  background-color: transparent !important;
-  background-image: none !important;
-  box-shadow: none !important;
-}}
-
+.overview-tile:outlined,
 .overview-tile.app-folder:hover,
 .overview-tile.app-folder:focus,
 .overview-tile.app-folder:selected,
@@ -195,32 +197,11 @@ def common_reset(dock: str, border: str) -> str:
 .overview-tile.app-folder:outlined {{
   background-color: transparent !important;
   background-image: none !important;
-  border-color: transparent !important;
-  box-sizing: border-box !important;
   box-shadow: none !important;
+  border: 0 !important;
 }}
 
-.app-well-app .overview-icon,
-.dash-item-container .overview-icon,
-.grid-search-result .overview-icon {{
-  background-color: transparent !important;
-  box-shadow: none !important;
-  border-radius: 999px !important;
-}}
-
-.show-apps .overview-icon,
-.app-folder .overview-icon {{
-  background-color: transparent !important;
-  background-image: none !important;
-  box-shadow: none !important;
-}}
-
-.dash-item-container:hover .overview-icon,
-.app-well-app:hover .overview-icon,
-.app-well-app:focus .overview-icon,
-.grid-search-result:hover .overview-icon,
-.show-apps:hover .overview-icon,
-.app-folder:hover .overview-icon {{
+{grid_icon_reset} {{
   background-color: transparent !important;
   background-image: none !important;
   border-color: transparent !important;
@@ -231,16 +212,14 @@ def common_reset(dock: str, border: str) -> str:
 '''.strip()
 
 
-def icon_bin_selector(states: bool = False, dock_only: bool = False, base_only: bool = False) -> str:
+def icon_bin_selector(states: bool = False, dock_only: bool = False) -> str:
     grid_bases = ['.overview-tile']
     bases = dock_roots() if dock_only else grid_bases
-    base_only = grid_bases
 
     if not states:
         selectors: list[str] = []
         for base in bases:
-            if base_only:
-                selectors.append(f'{base} {ICON_BIN}')
+            selectors.append(f'{base} {ICON_BIN}')
             if dock_only:
                 selectors.extend(
                     f'{base} {child} {ICON_BIN}'
@@ -250,7 +229,7 @@ def icon_bin_selector(states: bool = False, dock_only: bool = False, base_only: 
 
     selectors: list[str] = []
     for base in bases:
-        if base_only:
+        if not dock_only:
             selectors.extend(
                 f'{base_state} {ICON_BIN}'
                 for base_state in stateful(base, include_base=False)
@@ -265,6 +244,9 @@ def icon_bin_selector(states: bool = False, dock_only: bool = False, base_only: 
                         include_base=False,
                     )
                 )
+                selectors.append(
+                    f'{base} {child}.running {ICON_BIN}'
+                )
     return join_selectors(selectors)
 
 
@@ -278,10 +260,11 @@ def circle_body(
     dock_halo: int,
 ) -> str:
     ar, ag, ab = rgb(accent)
+    sr, sg, sb = rgb(secondary)
     reset = common_reset(dock, border)
 
-    grid_normal = icon_bin_selector(False, base_only=True)
-    grid_active = icon_bin_selector(True, base_only=True)
+    grid_normal = icon_bin_selector(False)
+    grid_active = icon_bin_selector(True)
     dock_normal = icon_bin_selector(False, dock_only=True)
     dock_active = icon_bin_selector(True, dock_only=True)
     show_apps_active = show_apps_active_selector()
@@ -300,40 +283,25 @@ def circle_body(
 
 /* App grid: large external halo, especially visible around visually small
  * icons such as Files. No padding or margin changes. */
-{grid_active} {{
-  background-color: rgba({ar}, {ag}, {ab}, 0.18) !important;
-  background-image: none !important;
-  border: 0 !important;
-  border-radius: 999px !important;
-  box-shadow: 0 0 0 {grid_halo}px rgba({ar}, {ag}, {ab}, 0.15) !important;
-}}
-
-/* Dock has less free space, so use a smaller but still colored halo. */
-{dock_active} {{
-  background-color: rgba({ar}, {ag}, {ab}, 0.20) !important;
-  background-image: none !important;
-  border: 0 !important;
-  border-radius: 999px !important;
-  box-shadow: 0 0 0 {dock_halo}px rgba({ar}, {ag}, {ab}, 0.17) !important;
-}}
-
-/* Show Applications has no BaseIcon StBin label structure. */
+ /* Dock has less free space, so use a smaller but still colored halo. */
+ /* Show Applications has no BaseIcon StBin label structure. */
+{grid_active},
+{dock_active},
 {show_apps_active} {{
-  background-color: rgba({ar}, {ag}, {ab}, 0.20) !important;
+  background-color: transparent !important;
   background-image: none !important;
   border: 0 !important;
   border-radius: 999px !important;
-  box-shadow: 0 0 0 {dock_halo}px rgba({ar}, {ag}, {ab}, 0.17) !important;
+  box-shadow: 0 0 0 5px rgba({sr}, {sg}, {sb}, 0.45) !important;
 }}
 
 .app-well-app .overview-icon,
-.app-folder .overview-icon {{
-  min-width: 55px !important;
-}}
-
+.app-folder .overview-icon,
 .app-well-app .overview-icon > StBoxLayout > StBin,
-.app-folder .overview-icon > StBoxLayout > StBin {{
+.app-folder .overview-icon > StBoxLayout > StBin,
+.app-folder:hover .overview-icon > StBoxLayout > StBin {{
   padding: 5px !important;
+  border-radius: 25px !important;
 }}
 
 /* Never paint the icon texture or folder miniature itself. */
@@ -341,13 +309,6 @@ def circle_body(
 .overview-tile .overview-icon > StBoxLayout > StBin > StWidget {{
   background-color: transparent !important;
   background-image: none !important;
-  box-shadow: none !important;
-}}
-
-.app-folder:hover .overview-icon > StBoxLayout > StBin {{
-  background-color: transparent !important;
-  background-image: none !important;
-  border: 0 !important;
   box-shadow: none !important;
 }}
 '''
@@ -372,7 +333,7 @@ def render(
 {tile_active_selector()} {{
   background-color: rgba({ar}, {ag}, {ab}, 0.16) !important;
   border: 1px solid rgba({ar}, {ag}, {ab}, 0.48) !important;
-  box-shadow: inset 0 0 0 50px rgba({sr}, {sg}, {sb}, 0.12) !important;
+  box-shadow: inset 0 0 0 5px rgba({sr}, {sg}, {sb}, 0.12) !important;
 }}
 '''
     elif mode == 'circle-compact':
