@@ -19,6 +19,7 @@ from typing import Iterable
 
 IGNORE = "IGNORE"
 THEME_RELOAD = "THEME_RELOAD"
+GTK_REFRESH = "GTK_REFRESH"
 ASSET_REFRESH = "ASSET_REFRESH"
 CONFIG_REFRESH = "CONFIG_REFRESH"
 FULL_SHELL_RESTART = "FULL_SHELL_RESTART"
@@ -26,6 +27,7 @@ FULL_SHELL_RESTART = "FULL_SHELL_RESTART"
 RANK = {
     IGNORE: 0,
     THEME_RELOAD: 10,
+    GTK_REFRESH: 11,
     ASSET_REFRESH: 20,
     CONFIG_REFRESH: 30,
     FULL_SHELL_RESTART: 40,
@@ -71,6 +73,10 @@ THEME_GLOBS = (
     "core/scripts/curve_style.py",
     "core/scripts/build-theme-sass.sh",
     "core/config/curves.json",
+)
+
+GTK_GLOBS = (
+    "core/scripts/gtk-theme.sh",
 )
 
 ASSET_GLOBS = (
@@ -144,6 +150,8 @@ def classify_path(raw: str, repo_root: Path | None = None) -> str:
         return CONFIG_REFRESH
     if _match(path, ASSET_GLOBS):
         return ASSET_REFRESH
+    if _match(path, GTK_GLOBS):
+        return GTK_REFRESH
     if _match(path, THEME_GLOBS):
         return THEME_RELOAD
 
@@ -663,6 +671,33 @@ def _print_hot_reload_success(details: list[dict[str, str]], theme: str) -> None
     print(f"Theme refresh requested: {theme}; setting and Shell identity verified, CSS application unacknowledged.", file=sys.stderr)
 
 
+def _run_gtk_refresh(repo_root: Path, check_alive=None) -> None:
+    import theme_hot_reload as hot
+
+    env = os.environ.copy()
+    env["FEDORA_NOVA_APP_DIR"] = str(repo_root / "core")
+    env.pop("BASH_ENV", None)
+    env.pop("ENV", None)
+    hot.run_checked(
+        [str(repo_root / "core/scripts/gtk-theme.sh"), "refresh"],
+        env=env,
+        timeout=15,
+        check_alive=check_alive,
+    )
+
+
+def _incremental_actions(details: list[dict[str, str]]) -> tuple[str, ...]:
+    actions = {item.get("action") for item in details}
+    if not actions or not actions.issubset({THEME_RELOAD, GTK_REFRESH}):
+        return ()
+    result = []
+    if THEME_RELOAD in actions:
+        result.append(THEME_RELOAD)
+    if GTK_REFRESH in actions:
+        result.append(GTK_REFRESH)
+    return tuple(result)
+
+
 def _cmd_watch_once(args: argparse.Namespace) -> int:
     token = os.environ.get("NOVA_PREVIEW_TOKEN") if args.supervisor_pid else None
     root = Path(args.repo_root)
@@ -681,27 +716,44 @@ def _cmd_watch_once(args: argparse.Namespace) -> int:
                     try:
                         hot.checkpoint()
                         action, details = collector.next_batch()
-                        if action != THEME_RELOAD:
+                        incremental = _incremental_actions(details)
+                        if not incremental:
                             break
                         attempted_reload = True
+
+                        # Reconcile before applying anything so an edit that arrived
+                        # at the debounce boundary cannot be silently skipped.
                         collector.reconcile()
                         collector.pump()
-                        if not collector.pending:
-                            theme = _run_theme_hot_reload(root, token, check_alive=collector.pump)
-                            collector.reconcile()
-                            collector.pump()
                         if collector.pending:
                             combined = {item["path"] for item in details} | collector.pending
                             _, details = classify_paths(sorted(combined), root)
                             action = FULL_SHELL_RESTART
                             break
-                        _print_hot_reload_success(details, theme)
+
+                        for operation in incremental:
+                            if operation == THEME_RELOAD:
+                                theme = _run_theme_hot_reload(root, token, check_alive=collector.pump)
+                                _print_hot_reload_success(details, theme)
+                            elif operation == GTK_REFRESH:
+                                _run_gtk_refresh(root, check_alive=collector.pump)
+                                print("GTK preview layer refreshed; nested Shell and watcher kept alive.", file=sys.stderr)
+
+                            collector.reconcile()
+                            collector.pump()
+                            if collector.pending:
+                                combined = {item["path"] for item in details} | collector.pending
+                                _, details = classify_paths(sorted(combined), root)
+                                action = FULL_SHELL_RESTART
+                                break
+                        if action == FULL_SHELL_RESTART:
+                            break
                     except (SupervisorGone, hot.Cancelled):
                         raise
                     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
                         if not attempted_reload:
                             raise
-                        print(f"Theme refresh rejected; requesting full restart: {exc}", file=sys.stderr)
+                        print(f"Incremental preview refresh rejected; requesting full restart: {exc}", file=sys.stderr)
                         action = FULL_SHELL_RESTART
                         break
     except SupervisorGone:

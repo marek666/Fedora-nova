@@ -1088,6 +1088,7 @@ except (OSError, json.JSONDecodeError) as exc:
 allowed = {
     "IGNORE",
     "THEME_RELOAD",
+    "GTK_REFRESH",
     "ASSET_REFRESH",
     "CONFIG_REFRESH",
     "FULL_SHELL_RESTART",
