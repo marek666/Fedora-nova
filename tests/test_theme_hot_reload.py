@@ -196,6 +196,17 @@ class Primitives(unittest.TestCase):
                 css = (theme / 'gnome-shell/gnome-shell.css').read_text()
                 self.assertEqual('border-radius: 123px' in css, not dynamic)
                 self.assertEqual('transition-duration: 777ms' in css, not dynamic)
+                # Execute the launcher's preparation block, including a second
+                # run over existing output to model a restart after an edit.
+                launcher = (REPO / 'dev-shell-preview.sh').read_text()
+                startup = launcher.split('<<\'PY\' || return $?\n', 1)[1].split('\nPY\n', 1)[0]
+                data = self.root / 'data'
+                subprocess.run(
+                    [sys.executable, '-', str(self.root), 'tech', THEME,
+                     str(config), str(state), str(data)],
+                    input=startup, text=True, check=True, capture_output=True,
+                )
+                self.assertEqual((data / 'themes' / THEME / 'gnome-shell/gnome-shell.css').read_text(), css)
             finally: shutil.rmtree(stage)
 
 

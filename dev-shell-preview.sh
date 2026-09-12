@@ -890,6 +890,26 @@ EOF
     "$CORE/config/profiles.json" "$PREVIEW_CONFIG/fedora-nova/custom-profiles" \
     "$PREVIEW_DATA/themes" >/dev/null || return $?
 
+  # Startup and restart must use the same sources and mode overrides as reload.
+  # Otherwise a conservative restart silently restores the checked-in CSS.
+  python3 - "$ROOT" "$PROFILE" "$THEME" "$PREVIEW_CONFIG" "$PREVIEW_STATE" "$PREVIEW_DATA" <<'PY' || return $?
+from pathlib import Path
+import shutil
+import sys
+
+root, profile, theme, config, state, data = sys.argv[1:]
+sys.path.insert(0, str(Path(root) / "core/scripts"))
+from theme_hot_reload import build_staged_theme
+
+stage, staged = build_staged_theme(
+    Path(root), Path(root) / "core", profile, theme, Path(config), Path(state)
+)
+try:
+    shutil.copytree(staged, Path(data) / "themes" / theme, dirs_exist_ok=True)
+finally:
+    shutil.rmtree(stage)
+PY
+
   WALL_PATH="$PREVIEW_DATA/backgrounds/fedora-nova/$WALLPAPER"
   [[ -f "$WALL_PATH" ]] || {
     echo "CHYBA: chybí wallpaper $WALL_PATH" >&2
@@ -939,6 +959,7 @@ print_banner() {
   echo "Fedora Nova Shell Preview"
   echo "========================="
   echo "Profil:      $PROFILE"
+  echo "Zdroje:      $ROOT"
   echo "Shell theme: $THEME"
   echo "Wallpaper:   $WALLPAPER"
   echo "Izolace:     $PREVIEW_ROOT"
