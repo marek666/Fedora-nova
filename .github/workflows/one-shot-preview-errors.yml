@@ -12,7 +12,6 @@ jobs:
   patch:
     if: ${{ !contains(github.event.head_commit.message, '[preview-errors-patched]') }}
     runs-on: ubuntu-latest
-    container: fedora:44
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,7 +19,9 @@ jobs:
           fetch-depth: 0
 
       - name: Install patch dependencies
-        run: dnf install -y git python3 sassc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sassc
 
       - name: Remove St-incompatible theme syntax
         run: |
@@ -140,6 +141,6 @@ jobs:
           rm -f .github/workflows/one-shot-preview-errors.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add core/themes core/themes-src/scss/layers/_hover-circle.scss tests/test_shell_theme_st_compat.py .github/workflows/one-shot-preview-errors.yml
+          git add -A
           git commit -m 'fix(shell): remove St parser warnings [preview-errors-patched]'
           git push origin HEAD:fix/shell-preview-stability
