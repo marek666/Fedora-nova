@@ -138,6 +138,48 @@ headerbar.titlebar {{
   border-color: {border};
 }}
 
+/* GTK3 client-side decorated windows, e.g. virt-manager. */
+window.csd .titlebar,
+window.solid-csd .titlebar {{
+  background-image: none;
+  background-color: {surface};
+  color: {text};
+  border-color: {border};
+  text-shadow: none;
+}}
+
+window.csd .titlebar:backdrop,
+window.solid-csd .titlebar:backdrop {{
+  background-image: none;
+  background-color: {large};
+  color: {text};
+  border-color: {border};
+  text-shadow: none;
+}}
+
+/* Keep CSD window controls visually lighter than normal app buttons. */
+window.csd .titlebar button,
+window.solid-csd .titlebar button {{
+  background-image: none;
+  background-color: transparent;
+  color: {text};
+  border-color: transparent;
+}}
+
+window.csd .titlebar button:hover,
+window.solid-csd .titlebar button:hover {{
+  background-color: {surface2};
+  color: {text};
+}}
+
+window.csd .titlebar button:active,
+window.csd .titlebar button:checked,
+window.solid-csd .titlebar button:active,
+window.solid-csd .titlebar button:checked {{
+  background-color: {accent};
+  color: {accent_fg};
+}}
+
 menubar {{
   background-color: {panel};
   color: {text};
@@ -203,16 +245,19 @@ iconview:selected:backdrop {{
 }}
 
 button {{
+  background-image: none;
   background-color: {surface2};
   color: {text};
   border: 1px solid {border};
   border-radius: 8px;
 }}
 button:hover {{
+  background-image: none;
   background-color: {card};
 }}
 button:active,
 button:checked {{
+  background-image: none;
   background-color: {accent};
   color: {accent_fg};
 }}
@@ -250,12 +295,68 @@ notebook > header {{
   color: {text};
   border-color: {border};
 }}
+
+/* GTK3 notebook content, e.g. virt-manager hardware/details view. */
+notebook > stack {{
+  background-color: {large};
+  color: {text};
+}}
+
+viewport {{
+  background-color: {large};
+  color: {text};
+}}
+
 notebook > header > tabs > tab {{
   color: {text};
 }}
 notebook > header > tabs > tab:checked {{
   background-color: {surface2};
   color: {text};
+}}
+
+/* GTK3 notebook tabs, e.g. virt-manager preferences */
+notebook > header,
+notebook > header.top,
+notebook > header.bottom,
+notebook > header.left,
+notebook > header.right {{
+  background-color: {panel};
+  color: {text};
+  border-color: {border};
+}}
+
+notebook > header > tabs > tab {{
+  background-color: {surface};
+  color: {text};
+  border-color: {border};
+  box-shadow: none;
+}}
+
+notebook > header > tabs > tab:hover {{
+  background-color: {accent};
+  color: {accent_fg};
+  border-color: {accent};
+}}
+
+notebook > header > tabs > tab:checked {{
+  background-color: {accent};
+  color: {accent_fg};
+  border-color: {accent};
+}}
+
+notebook > header > tabs > tab:backdrop {{
+  background-color: {large};
+  color: {text};
+  border-color: {border};
+}}
+
+notebook > header > tabs > tab:disabled,
+notebook > header > tabs > tab:disabled:hover {{
+  background-color: {large};
+  color: {border};
+  border-color: {border};
+  box-shadow: none;
 }}
 
 .sidebar,
@@ -278,6 +379,79 @@ tooltip {{
   color: {text};
   border-color: {border};
 }}
+
+/* Scrollbars */
+scrollbar trough {{
+  background-color: {large};
+}}
+
+scrollbar slider {{
+  background-color: {border};
+  border-radius: 999px;
+}}
+
+scrollbar slider:hover {{
+  background-color: {surface2};
+}}
+
+/* Sliders */
+scale trough {{
+  background-color: {surface};
+}}
+
+scale highlight {{
+  background-color: {accent};
+}}
+
+scale slider {{
+  background-color: {text};
+  border-color: {border};
+}}
+
+/* Progress bars */
+progressbar trough {{
+  background-color: {surface};
+}}
+
+progressbar progress {{
+  background-color: {accent};
+}}
+
+/* Switches */
+switch {{
+  background-image: none;
+  background-color: {surface};
+  border-color: {border};
+}}
+
+switch:checked {{
+  background-color: {accent};
+}}
+
+switch slider {{
+  background-image: none;
+  background-color: {text};
+}}
+
+/* Check / radio indicators */
+checkbutton check,
+radiobutton radio {{
+  background-image: none;
+  background-color: {large};
+  border-color: {border};
+}}
+
+checkbutton:checked check,
+radiobutton:checked radio {{
+  background-color: {accent};
+  color: {accent_fg};
+}}
+
+/* GtkPaned splitters */
+paned > separator {{
+  background-color: {border};
+}}
+
 /* NOVA_GTK_END */'''
 Path(sys.argv[2]).write_text(block4 + '\n', encoding='utf-8')
 Path(sys.argv[3]).write_text(block3 + '\n', encoding='utf-8')
