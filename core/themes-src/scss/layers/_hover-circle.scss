@@ -20,7 +20,7 @@
   background-image: none !important;
   border: 0 !important;
   border-radius: 999px !important;
-  box-shadow: 0 0 0 5px nova-rgba(secondary, 0.45) !important;
+  box-shadow: 0 0 0 7px nova-rgba(secondary, 0.55) !important;
 }
 
 @mixin nova-hover-dock-halo {
@@ -28,7 +28,11 @@
 }
 
 @mixin nova-hover-show-apps-halo {
-  @include nova-hover-grid-halo;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 0 5px nova-rgba(secondary, 0.55) !important;
 }
 
 @mixin nova-hover-circle-layer {
@@ -187,19 +191,17 @@ $nova-dock-icon-children: ".overview-tile", ".app-well-app";
   }
 }
 
-/* Show Applications has no BaseIcon StBin label structure. */
+/* Show Applications uses its own icon actor, not the BaseIcon StBin halo. */
 @each $root in $nova-dock-roots {
   @each $pseudo in $nova-hover-pseudos {
-    #{$root} .show-apps#{$pseudo} .overview-icon,
-    #{$root}#{$pseudo} .show-apps .overview-icon,
-    #{$root} .show-apps .overview-icon#{$pseudo} {
+    #{$root} .show-apps#{$pseudo} .show-apps-icon,
+    #{$root} .show-apps .show-apps-icon#{$pseudo} {
       @include nova-hover-show-apps-halo;
     }
   }
 
-  #{$root} .show-apps.focused .overview-icon,
-  #{$root}.focused .show-apps .overview-icon,
-  #{$root} .show-apps .overview-icon.focused {
+  #{$root} .show-apps.focused .show-apps-icon,
+  #{$root} .show-apps .show-apps-icon.focused {
     @include nova-hover-show-apps-halo;
   }
 }
