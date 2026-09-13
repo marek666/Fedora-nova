@@ -42,28 +42,36 @@ def _validate_tree(path: Path) -> None:
             raise PreviewSettingsError(f"unsafe preview settings entry: {entry}")
 
 
-def _paths(root: Path, profile: str) -> tuple[Path, Path]:
-    source = root / "config/dconf"
-    target = root / "persist/settings" / profile / "dconf"
-    return source, target
+SETTINGS_DIRS = ("dconf", "fedora-nova")
+
+
+def _settings_root(root: Path) -> Path:
+    # Validate parents too: validating a leaf does not catch a symlink above it.
+    for path in (root / "config", root / "persist", root / "persist/settings"):
+        if path.is_symlink():
+            raise PreviewSettingsError(f"unsafe preview settings directory: {path}")
+    return root / "persist/settings"
 
 
 def save(root: Path, profile: str) -> str:
     root = _root(root)
     profile = _profile(profile)
-    source, target = _paths(root, profile)
-    if not source.exists():
+    settings_root = _settings_root(root)
+    sources = [root / "config" / name for name in SETTINGS_DIRS]
+    for source in sources:
+        _validate_tree(source)
+    if not any(source.exists() for source in sources):
         return "empty"
-    _validate_tree(source)
-    settings_root = root / "persist/settings"
     settings_root.mkdir(parents=True, exist_ok=True)
     os.chmod(settings_root, 0o700)
     temp = Path(tempfile.mkdtemp(prefix=f".{profile}.", dir=settings_root))
     backup = settings_root / f".{profile}.backup"
-    profile_dir = target.parent
+    profile_dir = settings_root / profile
     try:
-        shutil.copytree(source, temp / "dconf")
-        _validate_tree(temp / "dconf")
+        for source in sources:
+            if source.exists():
+                shutil.copytree(source, temp / source.name)
+        _validate_tree(temp)
         if backup.exists():
             shutil.rmtree(backup)
         if profile_dir.exists():
@@ -85,6 +93,8 @@ def save(root: Path, profile: str) -> str:
 
 def save_current(root: Path) -> str:
     root = _root(root)
+    _settings_root(root)
+    _validate_tree(root / "config/fedora-nova")
     profile_file = root / "config/fedora-nova/current-profile"
     try:
         profile = profile_file.read_text(encoding="utf-8").strip()
@@ -96,24 +106,31 @@ def save_current(root: Path) -> str:
 def restore(root: Path, profile: str) -> str:
     root = _root(root)
     profile = _profile(profile)
-    source, target = _paths(root, profile)
-    if not target.exists():
+    profile_dir = _settings_root(root) / profile
+    _validate_tree(profile_dir)
+    if not any((profile_dir / name).exists() for name in SETTINGS_DIRS):
         return "fresh"
-    _validate_tree(target)
-    source.parent.mkdir(parents=True, exist_ok=True)
-    if source.exists() or source.is_symlink():
-        if source.is_symlink():
-            raise PreviewSettingsError(f"unsafe preview dconf target: {source}")
-        shutil.rmtree(source)
-    shutil.copytree(target, source)
-    _validate_tree(source)
-    return "restored"
+    # Old dconf-only snapshots remain readable. Validate all destinations before
+    # restoring either part, so unsafe Nova paths cannot partially replace dconf.
+    for name in SETTINGS_DIRS:
+        _validate_tree(root / "config" / name)
+    (root / "config").mkdir(parents=True, exist_ok=True)
+    for name in SETTINGS_DIRS:
+        source, target = profile_dir / name, root / "config" / name
+        if source.exists():
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(source, target)
+            _validate_tree(target)
+    # Nova files alone can survive a failed first start. They do not mean that
+    # GNOME defaults were ever seeded into a dconf database.
+    return "restored" if (profile_dir / "dconf/user").is_file() else "fresh"
 
 
 def reset(root: Path, profile: str) -> str:
     root = _root(root)
     profile = _profile(profile)
-    target = root / "persist/settings" / profile
+    target = _settings_root(root) / profile
     if target.is_symlink():
         raise PreviewSettingsError(f"unsafe persisted profile directory: {target}")
     if target.exists():

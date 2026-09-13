@@ -668,7 +668,7 @@ def _run_theme_hot_reload(repo_root: Path, token: str, check_alive=None) -> str:
 
 
 def _print_hot_reload_success(details: list[dict[str, str]], theme: str) -> None:
-    print(f"Theme refresh requested: {theme}; setting and Shell identity verified, CSS application unacknowledged.", file=sys.stderr)
+    print(f"Theme refresh completed: {theme}; preview session kept running.", file=sys.stderr)
 
 
 def _run_gtk_refresh(repo_root: Path, check_alive=None) -> None:
@@ -678,8 +678,10 @@ def _run_gtk_refresh(repo_root: Path, check_alive=None) -> None:
     env["FEDORA_NOVA_APP_DIR"] = str(repo_root / "core")
     env.pop("BASH_ENV", None)
     env.pop("ENV", None)
+    config = Path(_required_env("XDG_CONFIG_HOME")) / "fedora-nova/current-gtk"
+    action = "off" if hot.read_choice(config, "on") == "off" else "refresh"
     hot.run_checked(
-        [str(repo_root / "core/scripts/gtk-theme.sh"), "refresh"],
+        [str(repo_root / "core/scripts/gtk-theme.sh"), action],
         env=env,
         timeout=15,
         check_alive=check_alive,

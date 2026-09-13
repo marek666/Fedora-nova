@@ -1,6 +1,10 @@
 import re
 from pathlib import Path
 import unittest
+import json
+import shutil
+import subprocess
+import sys
 
 REPO = Path(__file__).resolve().parents[1]
 THEMES = REPO / 'core/themes'
@@ -62,6 +66,33 @@ class ShellThemeStCompatibility(unittest.TestCase):
             HOVER_RUNTIME.read_text(encoding='utf-8'),
             source=str(HOVER_RUNTIME),
         )
+
+    @unittest.skipUnless(shutil.which('sassc'), 'sassc required for rendered hover comparison')
+    def test_default_hover_appearance_matches_startup_and_sass_reload(self):
+        sys.path.insert(0, str(REPO / 'core/scripts'))
+        import hover_style
+        palette = json.loads((REPO / 'core/config/profiles.json').read_text())['profiles']['tech']
+        runtime = hover_style.render('circle', palette['accent'], palette['secondary'],
+                                     palette['dock_color'], palette['border'])
+        compiled = subprocess.check_output(['sassc', '-t', 'expanded',
+            str(REPO / 'core/themes-src/scss/profiles/tech.scss')], text=True)
+        def rules(css):
+            result = {}
+            for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', strip_comments(css)):
+                props = dict((k.strip(), re.sub(r'\s+', '', v))
+                             for k, v in (part.split(':', 1) for part in body.split(';') if ':' in part))
+                for selector in selectors.split(','):
+                    result.setdefault(selector.strip(), {}).update(props)
+            return result
+        initial, refreshed = rules(runtime), rules(compiled)
+        for selector, properties in [
+            ('.overview-tile:hover .overview-icon > StBoxLayout > StBin', ['box-shadow', 'background-color']),
+            ('#dashtodockContainer #dash .dash-item-container .app-well-app.running .overview-icon > StBoxLayout > StBin', ['box-shadow']),
+            ('.app-folder .overview-icon', ['padding', 'border-radius']),
+        ]:
+            for prop in properties:
+                with self.subTest(selector=selector, property=prop):
+                    self.assertEqual(initial[selector][prop], refreshed[selector][prop])
 
 if __name__ == '__main__':
     unittest.main()

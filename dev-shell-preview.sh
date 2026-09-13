@@ -54,6 +54,15 @@ ORIGINAL_HOME_REAL="$(readlink -m -- "$ORIGINAL_HOME")"
 ORIGINAL_PATH="${PATH:-/usr/local/bin:/usr/bin:/bin}"
 ORIGINAL_XDG_DATA_HOME="${XDG_DATA_HOME:-$ORIGINAL_HOME/.local/share}"
 ORIGINAL_XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+ORIGINAL_XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}"
+ORIGINAL_PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-$ORIGINAL_XDG_RUNTIME_DIR}"
+ORIGINAL_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}"
+# Mutter Devkit's window still needs the parent compositor after we give the
+# nested Shell its own runtime directory. Relative Wayland names would point
+# into the new directory instead of the parent session.
+if [[ -n "$ORIGINAL_WAYLAND_DISPLAY" && "$ORIGINAL_WAYLAND_DISPLAY" != /* ]]; then
+  ORIGINAL_WAYLAND_DISPLAY="$ORIGINAL_XDG_RUNTIME_DIR/$ORIGINAL_WAYLAND_DISPLAY"
+fi
 
 PREVIEW_ROOT="${XDG_CACHE_HOME:-$ORIGINAL_HOME/.cache}/fedora-nova-shell-preview"
 PREVIEW_HOME="$PREVIEW_ROOT/home"
@@ -61,6 +70,7 @@ PREVIEW_CONFIG="$PREVIEW_ROOT/config"
 PREVIEW_DATA="$PREVIEW_ROOT/data"
 PREVIEW_CACHE="$PREVIEW_ROOT/cache"
 PREVIEW_STATE="$PREVIEW_ROOT/state"
+PREVIEW_SESSION_RUNTIME="$PREVIEW_ROOT/session-runtime"
 PREVIEW_HOST_EXPORT="$PREVIEW_ROOT/host-export"
 PREVIEW_FLATPAK_EXPORT="$PREVIEW_ROOT/flatpak-export"
 RUNTIME_DIR="$PREVIEW_ROOT/runtime"
@@ -147,8 +157,8 @@ Examples:
   ./dev-shell-preview.sh --stop
 
 The preview runs in an isolated HOME, XDG and D-Bus session. In --watch mode
-repository changes are debounced and classified before the current conservative
-full-restart fallback is applied. The host GNOME session is untouched.
+CSS/Sass and GTK changes refresh incrementally; other changes or reload errors
+restart only the preview. Settings are preserved per profile.
 USAGE
 }
 
@@ -790,7 +800,7 @@ prepare_preview_root() {
   python3 "$CORE/scripts/theme_hot_reload.py" --archive-recovery \
     --preview-data "$PREVIEW_DATA" --preview-state "$PREVIEW_STATE" \
     --runtime-dir "$RUNTIME_DIR" || return $?
-  rm -rf "$PREVIEW_CONFIG" "$PREVIEW_DATA" "$PREVIEW_CACHE" "$PREVIEW_STATE"
+  rm -rf "$PREVIEW_CONFIG" "$PREVIEW_DATA" "$PREVIEW_CACHE" "$PREVIEW_STATE" "$PREVIEW_SESSION_RUNTIME"
   mkdir -p \
     "$PREVIEW_HOME" \
     "$PREVIEW_CONFIG" \
@@ -802,8 +812,9 @@ prepare_preview_root() {
     "$PREVIEW_DATA/backgrounds/fedora-nova" \
     "$PREVIEW_CACHE" \
     "$PREVIEW_STATE" \
+    "$PREVIEW_SESSION_RUNTIME" \
     "$RUNTIME_DIR"
-  chmod 700 "$PREVIEW_HOME" "$RUNTIME_DIR"
+  chmod 700 "$PREVIEW_HOME" "$RUNTIME_DIR" "$PREVIEW_SESSION_RUNTIME"
 
   restore_result="$(python3 "$PREVIEW_SETTINGS_HELPER" restore --preview-root "$PREVIEW_ROOT" --profile "$PROFILE")" || return $?
   if [[ "$restore_result" == "restored" ]]; then
@@ -842,10 +853,18 @@ EOF
   : > "$PREVIEW_CONFIG/gnome-initial-setup-done"
 
   printf '%s\n' "$PROFILE" > "$PREVIEW_CONFIG/fedora-nova/current-profile"
-  printf 'squircle\n' > "$PREVIEW_CONFIG/fedora-nova/current-curve"
-  printf 'circle\n' > "$PREVIEW_CONFIG/fedora-nova/current-hover"
-  printf 'tela\n' > "$PREVIEW_CONFIG/fedora-nova/current-icons"
-  printf 'on\n' > "$PREVIEW_CONFIG/fedora-nova/current-gtk"
+  local choice default
+  for choice in curve hover icons gtk; do
+    case "$choice" in
+      curve) default=squircle ;;
+      hover) default=circle ;;
+      icons) default=tela ;;
+      gtk) default=on ;;
+    esac
+    if [[ ! -s "$PREVIEW_CONFIG/fedora-nova/current-$choice" ]]; then
+      printf '%s\n' "$default" > "$PREVIEW_CONFIG/fedora-nova/current-$choice"
+    fi
+  done
 
   local tela_install_log="$PREVIEW_STATE/tela-install.log"
   if ! XDG_DATA_HOME="$PREVIEW_DATA" \
@@ -864,12 +883,12 @@ EOF
     XDG_DATA_HOME="$PREVIEW_DATA" \
     XDG_STATE_HOME="$PREVIEW_STATE" \
     FEDORA_NOVA_APP_DIR="$CORE" \
-    "$CORE/scripts/gtk-theme.sh" on >/dev/null 2>&1 || true
-  python3 "$CORE/scripts/curve_style.py" apply squircle \
-    "$CORE/config/curves.json" "$PREVIEW_DATA/themes" >/dev/null 2>&1 || true
-  python3 "$CORE/scripts/hover_style.py" circle \
+    "$CORE/scripts/gtk-theme.sh" "$(<"$PREVIEW_CONFIG/fedora-nova/current-gtk")" >/dev/null || return $?
+  python3 "$CORE/scripts/curve_style.py" apply "$(<"$PREVIEW_CONFIG/fedora-nova/current-curve")" \
+    "$CORE/config/curves.json" "$PREVIEW_DATA/themes" >/dev/null || return $?
+  python3 "$CORE/scripts/hover_style.py" "$(<"$PREVIEW_CONFIG/fedora-nova/current-hover")" \
     "$CORE/config/profiles.json" "$PREVIEW_CONFIG/fedora-nova/custom-profiles" \
-    "$PREVIEW_DATA/themes" >/dev/null 2>&1 || true
+    "$PREVIEW_DATA/themes" >/dev/null || return $?
 
   WALL_PATH="$PREVIEW_DATA/backgrounds/fedora-nova/$WALLPAPER"
   [[ -f "$WALL_PATH" ]] || {
@@ -886,6 +905,15 @@ export_preview_env() {
   export XDG_CACHE_HOME="$PREVIEW_CACHE"
   export XDG_STATE_HOME="$PREVIEW_STATE"
   export XDG_DATA_DIRS="$PREVIEW_XDG_DATA_DIRS"
+  export XDG_RUNTIME_DIR="$PREVIEW_SESSION_RUNTIME"
+  # Devkit transports its preview through PipeWire. Keep that connection to
+  # the parent session while isolating GNOME's own sockets and marker files.
+  if [[ -n "$ORIGINAL_PIPEWIRE_RUNTIME_DIR" ]]; then
+    export PIPEWIRE_RUNTIME_DIR="$ORIGINAL_PIPEWIRE_RUNTIME_DIR"
+  fi
+  if [[ -n "$ORIGINAL_WAYLAND_DISPLAY" ]]; then
+    export WAYLAND_DISPLAY="$ORIGINAL_WAYLAND_DISPLAY"
+  fi
 
   if [[ "${NOVA_PREVIEW_A11Y:-0}" != "1" ]]; then
     export NO_AT_BRIDGE=1
@@ -921,7 +949,7 @@ print_banner() {
     echo "Settings:    čisté výchozí pro profil $PROFILE"
   fi
   if [[ $WATCH -eq 1 ]]; then
-    echo "Live:        smart watch (inotify + polling fallback, full-restart apply)"
+    echo "Live:        CSS/Sass + GTK refresh; restart preview jen při nutnosti"
   fi
   if [[ "${NOVA_PREVIEW_A11Y:-0}" == "1" ]]; then
     echo "A11y bridge: zapnutý"
@@ -964,6 +992,7 @@ if [[ "${NOVA_PREVIEW_RESTORE_SETTINGS:-0}" != "1" ]]; then
     gsettings set org.gnome.shell.extensions.dash-to-dock background-color "$NOVA_PREVIEW_DOCK_COLOR" || true
     gsettings set org.gnome.shell.extensions.dash-to-dock background-opacity "$NOVA_PREVIEW_DOCK_OPACITY" || true
   fi
+  gsettings set org.gnome.shell enabled-extensions "$NOVA_PREVIEW_EXTENSIONS"
 fi
 
 if gsettings writable org.gnome.shell welcome-dialog-last-shown-version >/dev/null 2>&1; then
@@ -971,9 +1000,8 @@ if gsettings writable org.gnome.shell welcome-dialog-last-shown-version >/dev/nu
   gsettings set org.gnome.shell welcome-dialog-last-shown-version "${shell_version:-999.0}" || true
 fi
 
-# These are preview invariants rather than user preferences: keep the nested
-# session on the requested Nova theme and required extension set after restore.
-gsettings set org.gnome.shell enabled-extensions "$NOVA_PREVIEW_EXTENSIONS"
+# Keep the requested Nova theme, but respect restored extension enable/disable
+# choices (including User Themes). Defaults are seeded only for fresh profiles.
 gsettings set org.gnome.shell.extensions.user-theme name "$NOVA_PREVIEW_THEME"
 
 exec gnome-shell --devkit --wayland

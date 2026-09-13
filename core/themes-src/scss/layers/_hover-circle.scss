@@ -16,27 +16,19 @@
 }
 
 @mixin nova-hover-grid-halo {
-  background-color: nova-rgba(accent, 0.18) !important;
+  background-color: transparent !important;
   background-image: none !important;
   border: 0 !important;
   border-radius: 999px !important;
-  box-shadow: 0 0 0 10px nova-rgba(accent, 0.15) !important;
+  box-shadow: 0 0 0 5px nova-rgba(secondary, 0.45) !important;
 }
 
 @mixin nova-hover-dock-halo {
-  background-color: nova-rgba(accent, 0.20) !important;
-  background-image: none !important;
-  border: 0 !important;
-  border-radius: 999px !important;
-  box-shadow: 0 0 0 5px nova-rgba(accent, 0.17) !important;
+  @include nova-hover-grid-halo;
 }
 
 @mixin nova-hover-show-apps-halo {
-  background-color: nova-rgba(accent, 0.20) !important;
-  background-image: none !important;
-  border: 0 !important;
-  border-radius: 999px !important;
-  box-shadow: 0 0 0 5px nova-rgba(accent, 0.17) !important;
+  @include nova-hover-grid-halo;
 }
 
 @mixin nova-hover-circle-layer {
@@ -72,6 +64,7 @@ $nova-dock-icon-children: ".overview-tile", ".app-well-app";
   background-image: none !important;
   border-color: transparent !important;
   box-shadow: none !important;
+  border: 0 !important;
 }
 
 /* BaseIcon contains icon-bin and label. Keep the wrapper transparent. */
@@ -155,8 +148,7 @@ $nova-dock-icon-children: ".overview-tile", ".app-well-app";
   }
 }
 
-/* App grid: large external halo, especially visible around visually small
- * icons such as Files. No padding or margin changes. */
+/* Match the Python circle renderer used at preview startup. */
 @each $pseudo in $nova-hover-pseudos {
   .overview-tile#{$pseudo} .overview-icon > StBoxLayout > StBin,
   .overview-tile .overview-icon#{$pseudo} > StBoxLayout > StBin {
@@ -169,16 +161,14 @@ $nova-dock-icon-children: ".overview-tile", ".app-well-app";
   @include nova-hover-grid-halo;
 }
 
-/* Dock has less free space, so use a smaller but still colored halo. */
+/* The same narrow secondary-color outline is used in the dock. */
 @each $root in $nova-dock-roots {
   @each $pseudo in $nova-hover-pseudos {
-    #{$root}#{$pseudo} .overview-icon > StBoxLayout > StBin,
     #{$root} .overview-icon#{$pseudo} > StBoxLayout > StBin {
       @include nova-hover-dock-halo;
     }
   }
 
-  #{$root}.focused .overview-icon > StBoxLayout > StBin,
   #{$root} .overview-icon.focused > StBoxLayout > StBin {
     @include nova-hover-dock-halo;
   }
@@ -190,7 +180,8 @@ $nova-dock-icon-children: ".overview-tile", ".app-well-app";
       }
     }
 
-    #{$root} #{$child}.focused .overview-icon > StBoxLayout > StBin {
+    #{$root} #{$child}.focused .overview-icon > StBoxLayout > StBin,
+    #{$root} #{$child}.running .overview-icon > StBoxLayout > StBin {
       @include nova-hover-dock-halo;
     }
   }
@@ -211,6 +202,15 @@ $nova-dock-icon-children: ".overview-tile", ".app-well-app";
   #{$root} .show-apps .overview-icon.focused {
     @include nova-hover-show-apps-halo;
   }
+}
+
+.app-well-app .overview-icon,
+.app-folder .overview-icon,
+.app-well-app .overview-icon > StBoxLayout > StBin,
+.app-folder .overview-icon > StBoxLayout > StBin,
+.app-folder:hover .overview-icon > StBoxLayout > StBin {
+  padding: 5px !important;
+  border-radius: 25px !important;
 }
 
 /* Never paint the icon texture or folder miniature itself. */
