@@ -8,7 +8,7 @@
 @import url("resource:///org/gnome/theme/gnome-shell.css");
 
 stage {
-  font-family: "Inter", "Adwaita Sans", sans-serif;
+  font-family: Inter, Adwaita Sans, sans-serif;
   color: #F8EFFF;
 }
 
@@ -503,22 +503,20 @@ stage {
 
 
 /* ── Tela Circle integration ─────────────────────────────────────────── */
-.app-well-app .overview-icon,
+/* .app-well-app .overview-icon,
 .grid-search-result .overview-icon,
 .dash-item-container .overview-icon { 
   background-color: transparent !important;
   box-shadow: none !important;
-  border-radius: 999px !important;
+  border-radius: 999px !important; */
   /* padding: 5px !important; */
   /* background-color: rgba(46, 216, 232, 0.20) !important;
   background-image: none !important;
   border: 0 !important;
   border-radius: 999px !important; 
   box-shadow:
-    0 0 0 155px rgba(46, 216, 232, 0.17),
-    inset 0 0 0 155px rgba(46, 216, 232, 0.68),
-    inset 0 0 0 155px rgba(140, 92, 255, 0.14) !important; */
-}
+    0 0 0 155px rgba(46, 216, 232, 0.17) !important; */
+/* } */
 
 /*.show-apps .overview-icon, 
 .app-folder .overview-icon {
@@ -526,24 +524,24 @@ stage {
   background-image: none !important;
 } */
 
-.app-well-app:hover .overview-icon,
+/* .app-well-app:hover .overview-icon,
 .app-well-app:focus .overview-icon, 
-.grid-search-result:hover .overview-icon {
+.grid-search-result:hover .overview-icon { */
   /* background-color: rgba(46, 216, 232, 0.11) !important; */
-  /* box-shadow: inset 0 0 0 50px rgba(46, 216, 232, 0.24), inset 0 0 0 55px rgba(96, 64, 110, 0.78) !important; */
+  /* box-shadow: inset 0 0 0 50px rgba(46, 216, 232, 0.24) !important; */
   /* border-radius: 999px !important; */ 
-  background-color: rgba(46, 216, 232, 0.20) !important;
+  /* background-color: rgba(46, 216, 232, 0.20) !important;
   background-image: none !important;
-  border: 0 !important;
+  border: 0 !important; */
   /* border: 1px rgba(96, 64, 110, 0.82) !important; */
   /* border-color: rgba(96, 64, 110, 0.82) !important; */
-  border-radius: 999px !important;
-  /* box-shadow: inset 0 0 0 5px rgba(46, 216, 232, 0.17), inset 0 0 0 5px rgba(46, 216, 232, 0.68) !important; */
+  /* border-radius: 999px !important; */
+  /* box-shadow: inset 0 0 0 5px rgba(46, 216, 232, 0.17) !important; */
   /* border-width: 1px !important; */
   /* border-color: rgba(96, 64, 110, 0.78) !important; */  
   /* border: 2px solid rgba(96, 64, 110, 0.78) !important; */
-  box-shadow: 0 0 0 55px rgba(46, 216, 232, 0.68), inset 0 0 0 50px rgba(96, 64, 110, 0.78) !important;
-} 
+  /* box-shadow: 0 0 0 55px rgba(46, 216, 232, 0.68) !important;
+}  */
 
 /*.show-apps:hover .overview-icon,
   .app-folder:hover .overview-icon {
@@ -551,12 +549,23 @@ stage {
   background-image: url("assets/app-folder-squircle.svg") !important;
 } */
 
+.app-well-app .overview-icon,
+.grid-search-result .overview-icon,
+.dash-item-container .overview-icon,
+.show-apps .overview-icon, 
+.app-folder .overview-icon { 
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border-radius: 999px !important;
+  background-image: none !important;
+  border: 0 !important;
+}
+
 /* NOVA_TRUE_SQUIRCLE_START */
 /* SVG superellipse: visually closer to Apple's continuous corner than a circular CSS radius. */
 .app-folder-dialog {
   background-color: transparent;
   background-image: url("assets/app-folder-squircle.svg") !important;
-  background-size: 100% 100%;
   border: 0;
   border-radius: 0;
   box-shadow: none;
@@ -604,9 +613,7 @@ stage {
   border: 0 !important;
   border-radius: 999px !important;
   box-shadow:
-    0 0 0 55px rgba(46, 216, 232, 0.15),
-    inset 0 0 0 55px rgba(46, 216, 232, 0.62),
-    inset 0 0 0 55px rgba(140, 92, 255, 0.12) !important;
+    0 0 0 55px rgba(46, 216, 232, 0.15) !important;
 }
 
 #dashtodockContainer #dash .overview-tile:hover,
@@ -923,9 +930,7 @@ stage {
   border: 0 !important;
   border-radius: 999px !important;
   box-shadow:
-    0 0 0 5px rgba(46, 216, 232, 0.15),
-    inset 0 0 0 2px rgba(46, 216, 232, 0.62),
-    inset 0 0 0 3px rgba(140, 92, 255, 0.12) !important;
+    0 0 0 5px rgba(46, 216, 232, 0.15) !important;
 } */
 
 
@@ -1078,9 +1083,7 @@ stage {
   border: 0 !important;
   border-radius: 999px !important;
   box-shadow:
-    0 0 0 55px rgba(46, 216, 232, 0.17),
-    inset 0 0 0 55px rgba(46, 216, 232, 0.68),
-    inset 0 0 0 55px rgba(140, 92, 255, 0.14) !important;
+    0 0 0 55px rgba(46, 216, 232, 0.17) !important;
 } */
 
 /* Show Applications has no BaseIcon StBin label structure. */
@@ -1194,8 +1197,7 @@ stage {
   border: 0 !important;
   border-radius: 999px !important;
   box-shadow:
-    0 0 0 5px rgba(46, 216, 232, 0.17),
-    inset 0 0 0 2px rgba(46, 216, 232, 0.68) !important;
+    0 0 0 5px rgba(46, 216, 232, 0.17) !important;
 } */
 
 /* .dash-item-container .show-apps:hover .overview-icon,

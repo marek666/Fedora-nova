@@ -36,6 +36,7 @@ install_subdir(
     'scripts/install-assets.sh',
     'scripts/build-theme-sass.sh',
     'scripts/preview_reload.py',
+    'scripts/preview_settings.py',
     'scripts/theme_hot_reload.py',
   ],
 )

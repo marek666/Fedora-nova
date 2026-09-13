@@ -8,7 +8,7 @@
 @import url("resource:///org/gnome/theme/gnome-shell.css");
 
 stage {
-  font-family: "Inter", "Adwaita Sans", sans-serif;
+  font-family: Inter, Adwaita Sans, sans-serif;
   color: #ebf6ff;
 }
 
@@ -975,9 +975,7 @@ stage {
   border: 0 !important;
   border-radius: 999px !important;
   box-shadow:
-    0 0 0 10px rgba(53, 220, 232, 0.15),
-    inset 0 0 0 2px rgba(53, 220, 232, 0.62),
-    inset 0 0 0 3px rgba(154, 103, 255, 0.12) !important;
+    0 0 0 10px rgba(53, 220, 232, 0.15) !important;
 }
 
 /* Dock has less free space, so use a smaller but still colored halo. */
@@ -1126,9 +1124,7 @@ stage {
   border: 0 !important;
   border-radius: 999px !important;
   box-shadow:
-    0 0 0 5px rgba(53, 220, 232, 0.17),
-    inset 0 0 0 2px rgba(53, 220, 232, 0.68),
-    inset 0 0 0 3px rgba(154, 103, 255, 0.14) !important;
+    0 0 0 5px rgba(53, 220, 232, 0.17) !important;
 }
 
 /* Show Applications has no BaseIcon StBin label structure. */
@@ -1242,8 +1238,7 @@ stage {
   border: 0 !important;
   border-radius: 999px !important;
   box-shadow:
-    0 0 0 5px rgba(53, 220, 232, 0.17),
-    inset 0 0 0 2px rgba(53, 220, 232, 0.68) !important;
+    0 0 0 5px rgba(53, 220, 232, 0.17) !important;
 }
 
 /* Never paint the icon texture or folder miniature itself. */
