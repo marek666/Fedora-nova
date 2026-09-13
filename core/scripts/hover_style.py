@@ -70,18 +70,16 @@ def grid_overview_icon_selector() -> str:
 
 def show_apps_active_selector() -> str:
     selectors: list[str] = []
+
     for root in dock_roots():
         selectors.extend(
-            f'{root} {show_apps_state} .overview-icon'
-            for show_apps_state in stateful('.show-apps', include_base=False)
+            f'{root} {state} .show-apps-icon'
+            for state in stateful('.show-apps', include_base=False)
         )
         selectors.extend(
-            f'{root_state} .show-apps .overview-icon'
-            for root_state in stateful(root, include_base=False)
+            stateful(f'{root} .show-apps .show-apps-icon', include_base=False)
         )
-        selectors.extend(
-            stateful(f'{root} .show-apps .overview-icon', include_base=False)
-        )
+
     return join_selectors(selectors)
 
 
@@ -182,6 +180,7 @@ def dock_reset(dock: str, border: str) -> str:
 def common_reset(dock: str, border: str) -> str:
     grid_icon_reset = grid_overview_icon_selector()
     return f'''
+/* The outer tile contains the label, so keep it visually empty. */
 .overview-tile,
 .overview-tile:hover,
 .overview-tile:focus,
@@ -281,18 +280,25 @@ def circle_body(
   transition-duration: 100ms;
 }}
 
-/* App grid: large external halo, especially visible around visually small
- * icons such as Files. No padding or margin changes. */
- /* Dock has less free space, so use a smaller but still colored halo. */
- /* Show Applications has no BaseIcon StBin label structure. */
-{grid_active},
-{dock_active},
 {show_apps_active} {{
   background-color: transparent !important;
   background-image: none !important;
   border: 0 !important;
   border-radius: 999px !important;
-  box-shadow: 0 0 0 5px rgba({sr}, {sg}, {sb}, 0.45) !important;
+  box-shadow: 0 0 0 5px rgba({sr}, {sg}, {sb}, 0.55) !important;
+}}
+
+/* App grid: large external halo, especially visible around visually small
+ * icons such as Files. No padding or margin changes. */
+ /* Dock has less free space, so use a smaller but still colored halo. */
+ /* Show Applications has no BaseIcon StBin label structure. */
+{grid_active},
+{dock_active} {{
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 0 7px rgba({sr}, {sg}, {sb}, 0.55) !important;
 }}
 
 .app-well-app .overview-icon,
