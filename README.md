@@ -21,6 +21,9 @@ Development entry points remain in the repository root while the 0.8.0 preview i
 
 ## Development
 
+See [development integration and next steps](docs/DEVELOPMENT-PLAN.md) for the
+current branch integration order and preview verification checklist.
+
 Install the Fedora development dependencies:
 
 ```bash
