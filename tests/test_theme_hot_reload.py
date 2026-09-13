@@ -179,7 +179,7 @@ class Primitives(unittest.TestCase):
                 rc = watch.main(['watch-once', '--repo-root', '/tmp', '--supervisor-pid', str(os.getpid()), '--json'])
             self.assertEqual(rc, 0); self.assertEqual(json.loads(out.getvalue())['action'], watch.FULL_SHELL_RESTART)
     @unittest.skipUnless(shutil.which('sassc') or shutil.which('sass'), 'Sass unavailable')
-    def test_sass_default_layers_survive_and_dynamic_modes_work(self):
+    def test_sass_curve_and_python_hover_survive_startup_and_reload(self):
         core = self.root / 'core'
         for name in ['scripts', 'themes-src', 'themes', 'config']:
             shutil.copytree(REPO / 'core' / name, core / name)
@@ -195,7 +195,8 @@ class Primitives(unittest.TestCase):
             try:
                 css = (theme / 'gnome-shell/gnome-shell.css').read_text()
                 self.assertEqual('border-radius: 123px' in css, not dynamic)
-                self.assertEqual('transition-duration: 777ms' in css, not dynamic)
+                self.assertNotIn('transition-duration: 777ms', css)
+                self.assertIn(f'Fedora Nova hover mode: {"tile" if dynamic else "circle"};', css)
                 # Execute the launcher's preparation block, including a second
                 # run over existing output to model a restart after an edit.
                 launcher = (REPO / 'dev-shell-preview.sh').read_text()

@@ -15,6 +15,10 @@ Current Sass coverage:
 - `NOVA_HOVER` circle layer,
 - profile color tokens for the built-in themes.
 
+Preview startup and hot reload always regenerate `NOVA_HOVER` with
+`core/scripts/hover_style.py`, including the default `circle` mode. Edit that
+Python generator to change the hover appearance in the preview.
+
 Compile and validate the Sass layers:
 
 ```bash

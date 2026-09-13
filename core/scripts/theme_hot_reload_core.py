@@ -329,9 +329,9 @@ def build_staged_theme(repo_root: Path, core: Path, profile: str, theme: str,
         if curve != "squircle":
             run_checked([sys.executable, str(build_core / "scripts/curve_style.py"), "apply", curve,
                          str(build_core / "config/curves.json"), str(staging / "themes")])
-        if hover != "circle":
-            run_checked([sys.executable, str(build_core / "scripts/hover_style.py"), hover,
-                         str(build_core / "config/profiles.json"), str(config / "custom-profiles"), str(staging / "themes")])
+        # Keep hover rendering identical to apply-hover.sh, including circle.
+        run_checked([sys.executable, str(build_core / "scripts/hover_style.py"), hover,
+                     str(build_core / "config/profiles.json"), str(config / "custom-profiles"), str(staging / "themes")])
         validate_tree(staged)
         marker_ranges(css.read_text(), css)
         checkpoint()
