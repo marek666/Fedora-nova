@@ -827,6 +827,12 @@ prepare_preview_root() {
 
   prepare_host_exports
 
+  if [[ -d "/usr/share/gnome-shell/extensions/$DOCK_UUID" ]]; then
+    python3 "$ROOT/dev-tools/prepare_preview_dock.py" \
+      "/usr/share/gnome-shell/extensions/$DOCK_UUID" \
+      "$PREVIEW_DATA/gnome-shell/extensions/$DOCK_UUID" || return $?
+  fi
+
   cp -a "$CORE/themes/." "$PREVIEW_DATA/themes/"
   cp -a "$CORE/assets/wallpapers/." "$PREVIEW_DATA/backgrounds/fedora-nova/"
   if [[ -d "$TOPBAR_SOURCE" ]]; then
