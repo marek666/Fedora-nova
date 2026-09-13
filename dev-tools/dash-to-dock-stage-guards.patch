@@ -1,0 +1,21 @@
+--- a/dash.js
++++ b/dash.js
+@@ -303,2 +303,4 @@
+     vfunc_get_preferred_height(forWidth) {
++        if (!this.get_stage())
++            return [0, 0];
+         const [minHeight, natHeight] = super.vfunc_get_preferred_height.call(this, forWidth);
+@@ -311,2 +313,4 @@
+     vfunc_get_preferred_width(forHeight) {
++        if (!this.get_stage())
++            return [0, 0];
+         const [minWidth, natWidth] = super.vfunc_get_preferred_width.call(this, forHeight);
+--- a/docking.js
++++ b/docking.js
+@@ -2223,3 +2223,5 @@
+             'get_preferred_height', (_originalMethod, ...args) => {
+-                if (this.mainDock.isHorizontal && !this.settings.dockFixed)
++                if (this.mainDock.get_stage() &&
++                    this.mainDock.isHorizontal &&
++                    !this.settings.dockFixed)
+                     return this.mainDock.get_preferred_height(...args);
