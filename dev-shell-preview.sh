@@ -958,6 +958,7 @@ export_preview_env() {
   export NOVA_PREVIEW_DOCK_SIZE="$DOCK_SIZE"
   export NOVA_PREVIEW_RESTORE_SETTINGS="$PREVIEW_RESTORE_SETTINGS"
   export NOVA_PREVIEW_SHELL_PID_FILE="$SHELL_CHILD_PID_FILE"
+  export NOVA_PREVIEW_BMS_HELPER="$CORE/scripts/integrations/blur-my-shell.sh"
 }
 
 print_banner() {
@@ -1030,6 +1031,8 @@ fi
 # Keep the requested Nova theme, but respect restored extension enable/disable
 # choices (including User Themes). Defaults are seeded only for fresh profiles.
 gsettings set org.gnome.shell.extensions.user-theme name "$NOVA_PREVIEW_THEME"
+
+bash "$NOVA_PREVIEW_BMS_HELPER"
 
 exec gnome-shell --devkit --wayland
 '

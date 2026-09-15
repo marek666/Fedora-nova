@@ -45,7 +45,6 @@ if [[ "$CURRENT" != "$PRESET" ]]; then
 fi
 
 printf '%s\n' "$PRESET" > "$NOVA_CONFIG_DIR/current-curve"
-disable_extension blur-my-shell@aunetx
 log "Křivky: $PRESET — upraveno $CHANGED z $TOTAL theme souborů."
 
 if [[ $RELOAD -eq 1 ]]; then

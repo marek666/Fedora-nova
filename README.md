@@ -50,6 +50,62 @@ Run an isolated nested GNOME Shell:
 ./dev-shell-preview.sh --stop
 ```
 
+### Blur My Shell integration
+
+Fedora Nova leaves Blur My Shell enabled and uses it for its blur effects. To
+avoid its competing overview hover and component colors, the integration sets
+`org.gnome.shell.extensions.blur-my-shell.overview style-components` to `0`.
+This removes BMS component styling for the app grid, search results, search
+entry, workspace thumbnails, and related overview controls. Nova and the Shell
+theme then provide their appearance. It does not change BMS blur strength,
+brightness, noise, or which BMS blur features are enabled.
+
+The helper is:
+
+```bash
+core/scripts/integrations/blur-my-shell.sh [status|apply|restore]
+```
+
+`status` only reports the current setting and saved value. `apply` is the
+default action: on its first run it saves the current setting, changes it to
+`0` when necessary, and reads it back to confirm the change. Later runs retain
+the original backup. `restore` returns the saved value only when the current
+value is still `0` or already equals that backup; it preserves a conflicting
+manual nonzero choice instead.
+
+The saved value lives at:
+
+```text
+${XDG_CONFIG_HOME:-$HOME/.config}/fedora-nova/integrations/blur-my-shell/previous-style-components
+```
+
+The nested Shell preview runs `apply` after entering its isolated configuration
+and D-Bus session, before GNOME Shell starts. Its backup is therefore separate
+from the host at:
+
+```text
+<preview-root>/config/fedora-nova/integrations/blur-my-shell/previous-style-components
+```
+
+The host profile application, configuration import, and snapshot restore also
+run `apply`. Import and snapshot restore run it before and after loading BMS
+dconf data: the first call captures the local original value and the second
+enforces Nova compatibility after the imported data is loaded. The installer
+reaches the same path through `apply-preset`; `--no-apply` installs files
+without changing BMS settings.
+
+Normal uninstallation runs `restore` before removing Nova configuration. With
+`--restore`, the full dconf backup is authoritative and restores BMS together
+with the rest of the desktop settings. Nova never enables BMS itself, so an
+extension disabled by the user remains disabled. Safe mode still deliberately
+disables it.
+
+The helper checks the global GSettings schema first and then a locally
+installed BMS schema under `$XDG_DATA_HOME`. If neither is available, it reports
+that the integration is skipped and makes no changes. A requested `apply` or
+`restore` fails when the setting is not writable or its result cannot be read
+back.
+
 ## Checks
 
 ```bash

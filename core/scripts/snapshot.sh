@@ -58,6 +58,8 @@ restore_snapshot() {
       dconf load "$path" < "$dir/dconf/$file.dconf"
     fi
   }
+  # Uloží místní hodnotu BMS před načtením snapshotu.
+  bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply
   load interface /org/gnome/desktop/interface/
   load wm-preferences /org/gnome/desktop/wm/preferences/
   load background /org/gnome/desktop/background/
@@ -71,7 +73,8 @@ restore_snapshot() {
   for f in current-profile previous-profile current-dock previous-dock current-motion previous-motion current-curve previous-curve current-icons current-hover previous-hover current-gtk; do
     [[ -f "$dir/$f" ]] && cp "$dir/$f" "$NOVA_CONFIG_DIR/$f"
   done
-  disable_extension blur-my-shell@aunetx
+  # Snapshot mohl znovu načíst stylování komponent BMS.
+  bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply
   "$SCRIPT_DIR/apply-hover.sh" "$(current_hover)" >/dev/null 2>&1 || true
   "$SCRIPT_DIR/gtk-theme.sh" "$(current_gtk)" >/dev/null 2>&1 || true
   log "Snapshot obnoven: $name. Pro jistotu proveď relogin."

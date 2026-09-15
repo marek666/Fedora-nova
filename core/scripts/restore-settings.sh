@@ -32,7 +32,6 @@ mkdir -p "$NOVA_CONFIG_DIR"
 for f in current-profile previous-profile current-dock previous-dock current-motion previous-motion current-curve previous-curve current-icons current-hover previous-hover current-gtk; do
   [[ -f "$BACKUP_DIR/$f" ]] && cp "$BACKUP_DIR/$f" "$NOVA_CONFIG_DIR/$f"
 done
-disable_extension blur-my-shell@aunetx
 "$SCRIPT_DIR/apply-hover.sh" "$(current_hover)" >/dev/null 2>&1 || true
 "$SCRIPT_DIR/gtk-theme.sh" "$(current_gtk)" >/dev/null 2>&1 || true
 log "Obnova dokončena. Pro plný efekt se odhlas a znovu přihlas."

@@ -10,7 +10,7 @@ case "$PRESET" in
   list)
     printf '%-12s %s\n' reduced 'minimum animací; nejlepší diagnostický režim'
     printf '%-12s %s\n' balanced 'výchozí svižné animace'
-    printf '%-12s %s\n' smooth 'delší, ale stále bez blur efektu'
+    printf '%-12s %s\n' smooth 'delší animace'
     exit 0 ;;
   reduced) ENABLE=false; ANIMATION=0.10; SHOW=0.03; HIDE=0.10 ;;
   balanced) ENABLE=true; ANIMATION=0.18; SHOW=0.08; HIDE=0.16 ;;
@@ -19,7 +19,6 @@ case "$PRESET" in
 esac
 
 ensure_gnome_session
-disable_extension blur-my-shell@aunetx
 try_set org.gnome.desktop.interface enable-animations "$ENABLE"
 try_set "$SCHEMA" animation-time "$ANIMATION"
 try_set "$SCHEMA" show-delay "$SHOW"
@@ -27,4 +26,4 @@ try_set "$SCHEMA" hide-delay "$HIDE"
 
 mkdir -p "$NOVA_CONFIG_DIR"
 printf '%s\n' "$PRESET" > "$NOVA_CONFIG_DIR/current-motion"
-log "Pohybový preset: $PRESET (bez blur)"
+log "Pohybový preset: $PRESET"

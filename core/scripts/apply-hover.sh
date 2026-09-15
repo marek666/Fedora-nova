@@ -37,7 +37,6 @@ if [[ "$CURRENT" != "$MODE" ]]; then
 fi
 
 printf '%s\n' "$MODE" > "$NOVA_CONFIG_DIR/current-hover"
-disable_extension blur-my-shell@aunetx
 log "Hover: $MODE — ${RESULT%%$'\t'*} theme souborů upraveno."
 
 if [[ $RELOAD -eq 1 ]]; then

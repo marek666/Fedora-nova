@@ -33,6 +33,8 @@ PAYLOAD="$TMP/fedora-nova-export"
 [[ -f "$PAYLOAD/manifest.txt" ]] || die "Nejde o Fedora Nova export."
 
 "$SCRIPT_DIR/backup-settings.sh" >/dev/null
+# Uloží místní hodnotu BMS před načtením nastavení z importu.
+bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply
 
 load() {
   local file="$1" path="$2"
@@ -72,7 +74,8 @@ if [[ -d "$PAYLOAD/custom/palettes" ]]; then
   cp -a "$PAYLOAD/custom/palettes/." "$NOVA_PTYXIS_DIR/"
 fi
 
-disable_extension blur-my-shell@aunetx
+# Import mohl znovu načíst stylování komponent BMS.
+bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply
 "$SCRIPT_DIR/apply-hover.sh" "$(current_hover)" >/dev/null 2>&1 || true
 "$SCRIPT_DIR/gtk-theme.sh" "$(current_gtk)" >/dev/null 2>&1 || true
 log "Import dokončen. Pro jistotu proveď relogin."

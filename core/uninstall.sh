@@ -27,7 +27,6 @@ while (($#)); do
 done
 
 log "Vypínám Fedora Nova theme a dock"
-disable_extension blur-my-shell@aunetx
 disable_extension dash-to-dock@micxgx.gmail.com
 disable_extension user-theme@gnome-shell-extensions.gcampax.github.com
 disable_extension topbar-all-monitors@fa8i.github.io
@@ -37,7 +36,9 @@ disable_extension topbar-all-monitors@fa8i.github.io
 if [[ $RESTORE -eq 1 ]]; then
   "$PROJECT_DIR/scripts/restore-settings.sh"
 else
-  warn "Nastavení nebyla obnovena. Použij --restore pro návrat k poslední záloze."
+  log "Obnovuji původní nastavení Blur My Shell"
+  bash "$PROJECT_DIR/scripts/integrations/blur-my-shell.sh" restore
+  warn "Ostatní nastavení nebyla obnovena. Použij --restore pro návrat k poslední dconf záloze."
 fi
 
 find "$NOVA_THEMES_DIR" -mindepth 1 -maxdepth 1 -type d \

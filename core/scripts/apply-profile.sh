@@ -42,8 +42,8 @@ if [[ "${NOVA_SKIP_HISTORY:-0}" != 1 && "$OLD_PROFILE" != "$PROFILE" ]]; then
     cp "$NOVA_CONFIG_DIR/current-motion" "$NOVA_CONFIG_DIR/previous-motion" || true
 fi
 
-log "Vypínám problematický dynamický blur"
-disable_extension blur-my-shell@aunetx
+log "Nastavuji kompatibilitu s Blur My Shell"
+bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply
 
 log "Aktivuji profil $PROFILE — $TITLE"
 enable_extension user-theme@gnome-shell-extensions.gcampax.github.com
