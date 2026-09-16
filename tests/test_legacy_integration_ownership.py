@@ -28,6 +28,9 @@ class LegacyIntegrationOwnershipTests(unittest.TestCase):
         shutil.copy2(REPO / "core/scripts/lib.sh", self.core / "scripts/lib.sh")
         shutil.copy2(REPO / "core/scripts/install-assets.sh", self.core / "scripts/install-assets.sh")
         shutil.copy2(REPO / "core/uninstall.sh", self.core / "uninstall.sh")
+        integration = self.core / "scripts/integrations/blur-my-shell.sh"
+        integration.parent.mkdir(parents=True)
+        shutil.copy2(REPO / "core/scripts/integrations/blur-my-shell.sh", integration)
         self.put(
             self.core / "scripts/install-user-assets.sh",
             '#!/usr/bin/env bash\nprintf called > "$NOVA_TEST_CALLS"\n',

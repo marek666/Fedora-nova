@@ -1032,7 +1032,9 @@ fi
 # choices (including User Themes). Defaults are seeded only for fresh profiles.
 gsettings set org.gnome.shell.extensions.user-theme name "$NOVA_PREVIEW_THEME"
 
-bash "$NOVA_PREVIEW_BMS_HELPER"
+if ! bash "$NOVA_PREVIEW_BMS_HELPER" apply; then
+  echo "VAROVÁNÍ: Integraci Blur My Shell se nepodařilo aplikovat; preview pokračuje." >&2
+fi
 
 exec gnome-shell --devkit --wayland
 '

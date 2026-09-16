@@ -34,8 +34,9 @@ PAYLOAD="$TMP/fedora-nova-export"
 
 "$SCRIPT_DIR/backup-settings.sh" >/dev/null
 # Uloží místní hodnotu BMS před načtením nastavení z importu.
-bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply
-
+if ! bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply; then
+  warn "Před importem se nepodařilo uložit stav Blur My Shell; pokračuji."
+fi
 load() {
   local file="$1" path="$2"
   if [[ -s "$PAYLOAD/dconf/$file.dconf" ]]; then
@@ -75,7 +76,9 @@ if [[ -d "$PAYLOAD/custom/palettes" ]]; then
 fi
 
 # Import mohl znovu načíst stylování komponent BMS.
-bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply
+if ! bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply; then
+  warn "Po importu se nepodařilo nastavit kompatibilitu Blur My Shell; pokračuji."
+fi
 "$SCRIPT_DIR/apply-hover.sh" "$(current_hover)" >/dev/null 2>&1 || true
 "$SCRIPT_DIR/gtk-theme.sh" "$(current_gtk)" >/dev/null 2>&1 || true
 log "Import dokončen. Pro jistotu proveď relogin."

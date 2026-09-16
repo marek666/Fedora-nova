@@ -43,7 +43,9 @@ if [[ "${NOVA_SKIP_HISTORY:-0}" != 1 && "$OLD_PROFILE" != "$PROFILE" ]]; then
 fi
 
 log "Nastavuji kompatibilitu s Blur My Shell"
-bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply
+if ! bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply; then
+  warn "Integraci Blur My Shell se nepodařilo aplikovat; pokračuji."
+fi
 
 log "Aktivuji profil $PROFILE — $TITLE"
 enable_extension user-theme@gnome-shell-extensions.gcampax.github.com

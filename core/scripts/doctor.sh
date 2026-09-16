@@ -55,8 +55,17 @@ fi
 
 if gnome-extensions list --enabled 2>/dev/null |
     grep -Fxq blur-my-shell@aunetx; then
-  printf '  WARN Blur My Shell je zapnutý — může vrátit lag compositoru.\n'
-  issues=$((issues+1))
+  bms_status="$(bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" status 2>&1)"
+
+  if grep -Fq 'Aktuální style-components: 0' <<< "$bms_status"; then
+    printf '  OK   Blur My Shell je aktivní a jeho stylování přehledu je vypnuté.\n'
+  elif grep -Eq 'Aktuální style-components: [1-3]' <<< "$bms_status"; then
+    printf '  WARN Blur My Shell přepisuje stylování přehledu. Spusť znovu aplikaci profilu.\n'
+    issues=$((issues+1))
+  else
+    printf '  WARN Blur My Shell je aktivní, ale jeho nastavení přehledu nelze ověřit.\n'
+    issues=$((issues+1))
+  fi
 else
   printf '  OK   Blur My Shell není aktivní.\n'
 fi

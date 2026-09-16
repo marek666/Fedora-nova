@@ -59,7 +59,9 @@ restore_snapshot() {
     fi
   }
   # Uloží místní hodnotu BMS před načtením snapshotu.
-  bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply
+  if ! bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply; then
+    warn "Před obnovou snapshotu se nepodařilo uložit stav Blur My Shell; pokračuji."
+  fi
   load interface /org/gnome/desktop/interface/
   load wm-preferences /org/gnome/desktop/wm/preferences/
   load background /org/gnome/desktop/background/
@@ -74,7 +76,9 @@ restore_snapshot() {
     [[ -f "$dir/$f" ]] && cp "$dir/$f" "$NOVA_CONFIG_DIR/$f"
   done
   # Snapshot mohl znovu načíst stylování komponent BMS.
-  bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply
+  if ! bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply; then
+    warn "Po obnově snapshotu se nepodařilo nastavit kompatibilitu Blur My Shell; pokračuji."
+  fi
   "$SCRIPT_DIR/apply-hover.sh" "$(current_hover)" >/dev/null 2>&1 || true
   "$SCRIPT_DIR/gtk-theme.sh" "$(current_gtk)" >/dev/null 2>&1 || true
   log "Snapshot obnoven: $name. Pro jistotu proveď relogin."

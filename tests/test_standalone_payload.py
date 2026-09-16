@@ -41,6 +41,7 @@ class StandalonePayloadTests(unittest.TestCase):
             "scripts/lib.sh",
             "scripts/profile-info.py",
             "config/profiles.json",
+            "scripts/integrations/blur-my-shell.sh",
         ):
             target = self.core / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -98,7 +99,14 @@ class StandalonePayloadTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
         installed = self.data / "fedora-nova"
-        for relative in ("install.sh", "nova", "scripts/lib.sh", "scripts/install-assets.sh", "config/profiles.json"):
+        for relative in (
+            "install.sh",
+            "nova",
+            "scripts/lib.sh",
+            "scripts/install-assets.sh",
+            "scripts/integrations/blur-my-shell.sh",
+            "config/profiles.json",
+        ):
             with self.subTest(runtime=relative):
                 self.assertTrue((installed / relative).is_file())
 

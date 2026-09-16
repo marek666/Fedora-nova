@@ -100,7 +100,8 @@ class LegacyPtyxisCleanupTests(unittest.TestCase):
     def make_standalone(self) -> Path:
         core = self.root / "standalone core"
         (core / "scripts").mkdir(parents=True)
-        for relative in ("uninstall.sh", "scripts/lib.sh"):
+        for relative in ("uninstall.sh", "scripts/lib.sh",
+                         "scripts/integrations/blur-my-shell.sh"):
             target = core / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(REPO / "core" / relative, target)

@@ -37,7 +37,9 @@ if [[ $RESTORE -eq 1 ]]; then
   "$PROJECT_DIR/scripts/restore-settings.sh"
 else
   log "Obnovuji původní nastavení Blur My Shell"
-  bash "$PROJECT_DIR/scripts/integrations/blur-my-shell.sh" restore
+  if ! bash "$PROJECT_DIR/scripts/integrations/blur-my-shell.sh" restore; then
+    die "Obnovu Blur My Shell se nepodařilo dokončit. Konfiguraci Fedora Nova ponechávám, aby šla obnova zopakovat."
+  fi
   warn "Ostatní nastavení nebyla obnovena. Použij --restore pro návrat k poslední dconf záloze."
 fi
 
