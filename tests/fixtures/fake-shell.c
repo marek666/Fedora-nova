@@ -14,7 +14,8 @@ static gboolean check_close(gpointer unused) {
 }
 int main(int argc, char **argv) {
     if (argc == 2 && !g_strcmp0(argv[1], "--version")) { g_print("GNOME Shell 50.0\n"); return 0; }
-    if (argc != 3 || g_strcmp0(argv[1], "--devkit") || g_strcmp0(argv[2], "--wayland")) return 2;
+    if (argc != 4 || g_strcmp0(argv[1], "--devkit") || g_strcmp0(argv[2], "--wayland") ||
+        !g_str_has_prefix(argv[3], "--wayland-display=fedora-nova-preview-")) return 2;
     const char *root = g_getenv("NOVA_TEST_DIR");
     if (!root) return 2;
     GError *error = NULL;

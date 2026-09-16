@@ -151,7 +151,7 @@ class ShellPreviewPersistenceWiring(unittest.TestCase):
         self.assertNotIn('org.gnome.shell enabled-extensions', after)
         self.assertIn('org.gnome.shell.extensions.user-theme name', after)
 
-    def test_dbus_activated_apps_get_host_files_but_keep_preview_session(self):
+    def test_dbus_activated_apps_use_host_runtime_and_preview_wayland_bridge(self):
         shell_environment = self.script[self.script.index('export_preview_env() {'):
                                         self.script.index('\nprint_banner() {')]
         for assignment in (
@@ -164,11 +164,25 @@ class ShellPreviewPersistenceWiring(unittest.TestCase):
         ):
             self.assertIn(assignment, shell_environment)
 
+        self.assertIn(
+            'NOVA_PREVIEW_WAYLAND_NAME="fedora-nova-preview-${NOVA_PREVIEW_TOKEN:0:8}"',
+            self.script)
+        self.assertIn('PREVIEW_WAYLAND_SOCKET="$PREVIEW_SESSION_RUNTIME/$NOVA_PREVIEW_WAYLAND_NAME"',
+                      self.script)
+        self.assertIn('PREVIEW_WAYLAND_BRIDGE="$ORIGINAL_XDG_RUNTIME_DIR/$NOVA_PREVIEW_WAYLAND_NAME"',
+                      self.script)
+        self.assertIn(
+            'exec gnome-shell --devkit --wayland --wayland-display="$NOVA_PREVIEW_WAYLAND_NAME"',
+            self.script)
+
         start = self.script.index('set_dbus_activation_environment() {')
-        end = self.script.index('\n\nexec gnome-shell --devkit --wayland', start)
+        end = self.script.index('\n\nexec gnome-shell --devkit --wayland --wayland-display=', start)
         activation_environment = self.script[start:end]
-        self.assertIn('gdbus wait --session --timeout=10 org.gnome.Shell',
-                      activation_environment)
+        self.assertIn('if ! set_dbus_activation_environment; then', activation_environment)
+        self.assertNotIn('gdbus wait --session', activation_environment)
+        self.assertNotIn('WAYLAND_DISPLAY="$NOVA_PREVIEW_SESSION_RUNTIME/wayland-0"',
+                         activation_environment)
+        self.assertEqual(activation_environment.count('set_dbus_activation_environment'), 2)
         for assignment in (
             'HOME="$NOVA_PREVIEW_HOST_HOME"',
             'XDG_CONFIG_HOME="$NOVA_PREVIEW_HOST_XDG_CONFIG_HOME"',
@@ -177,7 +191,7 @@ class ShellPreviewPersistenceWiring(unittest.TestCase):
             'XDG_STATE_HOME="$NOVA_PREVIEW_HOST_XDG_STATE_HOME"',
             'XDG_DATA_DIRS="$NOVA_PREVIEW_HOST_XDG_DATA_DIRS"',
             'XDG_RUNTIME_DIR="$NOVA_PREVIEW_HOST_XDG_RUNTIME_DIR"',
-            'WAYLAND_DISPLAY="$NOVA_PREVIEW_SESSION_RUNTIME/wayland-0"',
+            'WAYLAND_DISPLAY="$NOVA_PREVIEW_WAYLAND_NAME"',
         ):
             self.assertIn(assignment, activation_environment)
         activation_lines = activation_environment.splitlines()
@@ -187,6 +201,141 @@ class ShellPreviewPersistenceWiring(unittest.TestCase):
         ):
             self.assertFalse(any(line.lstrip().startswith(forbidden)
                                  for line in activation_lines))
+
+        bridge_start = self.script.index('create_preview_wayland_bridge() {')
+        bridge_end = self.script.index('\n\nprint_banner() {', bridge_start)
+        bridge = self.script[bridge_start:bridge_end]
+        self.assertIn('ln -s -- "$PREVIEW_WAYLAND_SOCKET" "$PREVIEW_WAYLAND_BRIDGE"', bridge)
+        self.assertIn('create_preview_wayland_bridge || return $?', self.script)
+
+        cleanup_start = self.script.index('cleanup_preview_wayland_bridge() {')
+        cleanup_end = self.script.index('\n\nprocess_cmdline()', cleanup_start)
+        cleanup = self.script[cleanup_start:cleanup_end]
+        self.assertIn('actual_target="$(readlink -- "$bridge")"', cleanup)
+        self.assertIn('[[ "$actual_target" == "$target" ]] || return 0', cleanup)
+        self.assertIn('rm -f -- "$bridge"', cleanup)
+
+    def test_preview_keyring_is_isolated_best_effort_and_starts_before_services(self):
+        session_start = self.script.index("SESSION_SCRIPT='\n")
+        keyring_start = self.script.index('preview_dbus_name_has_owner() {', session_start)
+        keyring_end = self.script.index('\n\nstart_preview_gvfs() {', keyring_start)
+        keyring = self.script[keyring_start:keyring_end]
+        first_gsettings = self.script.index('gsettings set org.gnome.desktop.interface color-scheme',
+                                            session_start)
+
+        self.assertLess(keyring_start, first_gsettings)
+        self.assertIn('mkdir -p "$NOVA_PREVIEW_KEYRING_CONTROL_DIR"', keyring)
+        self.assertIn('chmod 700 "$NOVA_PREVIEW_KEYRING_CONTROL_DIR"', keyring)
+        self.assertIn('>"$NOVA_PREVIEW_KEYRING_LOG" 2>&1 &', keyring)
+        self.assertIn('--foreground', keyring)
+        self.assertIn('--components=secrets', keyring)
+        self.assertIn('--control-directory="$NOVA_PREVIEW_KEYRING_CONTROL_DIR"', keyring)
+        self.assertNotIn('--start', keyring)
+        self.assertNotIn('NOVA_PREVIEW_HOST_', keyring)
+        self.assertNotIn('ORIGINAL_', keyring)
+
+        for inherited in (
+            'GNOME_KEYRING_CONTROL',
+            'SSH_AUTH_SOCK',
+            'DBUS_STARTER_ADDRESS',
+            'DBUS_STARTER_BUS_TYPE',
+        ):
+            self.assertIn(f'-u {inherited}', keyring)
+        for preview_value in (
+            'HOME="$HOME"',
+            'XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR"',
+            'XDG_CONFIG_HOME="$XDG_CONFIG_HOME"',
+            'XDG_DATA_HOME="$XDG_DATA_HOME"',
+            'XDG_CACHE_HOME="$XDG_CACHE_HOME"',
+            'XDG_STATE_HOME="$XDG_STATE_HOME"',
+            'DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS"',
+        ):
+            self.assertIn(preview_value, keyring)
+        self.assertIn('org.freedesktop.DBus.NameHasOwner', keyring)
+        self.assertIn('org.freedesktop.secrets', keyring)
+        self.assertIn('for attempt in {1..40}; do', keyring)
+        self.assertIn('Preview pokračuje bez Secret Service.', keyring)
+
+        self.assertIn('setsid dbus-run-session -- env -u BASH_ENV -u ENV bash -c "$SESSION_SCRIPT" &',
+                      self.script)
+        self.assertNotIn('NOVA_PREVIEW_KEYRING_PID', self.script)
+
+    def test_preview_gvfs_is_isolated_best_effort_and_precedes_host_activation(self):
+        session_start = self.script.index("SESSION_SCRIPT='\n")
+        gvfs_start = self.script.index('start_preview_gvfs() {', session_start)
+        gvfs_end = self.script.index('\n\nstart_preview_localsearch() {', gvfs_start)
+        gvfs = self.script[gvfs_start:gvfs_end]
+        keyring_call = self.script.index('\nstart_preview_keyring\n', session_start)
+        gvfs_call = self.script.index('\nstart_preview_gvfs\n', gvfs_start)
+        first_gsettings = self.script.index('gsettings set org.gnome.desktop.interface color-scheme',
+                                            session_start)
+        activation_start = self.script.index('set_dbus_activation_environment() {', session_start)
+
+        self.assertLess(keyring_call, gvfs_call)
+        self.assertLess(gvfs_call, first_gsettings)
+        self.assertLess(first_gsettings, activation_start)
+        self.assertIn('/usr/libexec/gvfsd', gvfs)
+        self.assertIn('GVFS_DISABLE_FUSE=1', gvfs)
+        self.assertIn('>"$NOVA_PREVIEW_GVFS_LOG" 2>&1 &', gvfs)
+        self.assertIn('org.gtk.vfs.Daemon', gvfs)
+        self.assertIn('for attempt in {1..40}; do', gvfs)
+        self.assertIn('Preview pokračuje bez vlastního GVFS.', gvfs)
+        self.assertNotIn('gvfsd-fuse', gvfs)
+        self.assertNotIn('/run/user/', gvfs)
+        self.assertNotIn('NOVA_PREVIEW_HOST_', gvfs)
+        self.assertNotIn('ORIGINAL_', gvfs)
+        self.assertNotIn('NOVA_PREVIEW_GVFS_PID', self.script)
+
+        for inherited in ('DBUS_STARTER_ADDRESS', 'DBUS_STARTER_BUS_TYPE'):
+            self.assertIn(f'-u {inherited}', gvfs)
+        for preview_value in (
+            'HOME="$HOME"',
+            'XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR"',
+            'XDG_CONFIG_HOME="$XDG_CONFIG_HOME"',
+            'XDG_DATA_HOME="$XDG_DATA_HOME"',
+            'XDG_CACHE_HOME="$XDG_CACHE_HOME"',
+            'XDG_STATE_HOME="$XDG_STATE_HOME"',
+            'DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS"',
+        ):
+            self.assertIn(preview_value, gvfs)
+
+    def test_preview_localsearch_is_isolated_best_effort_and_precedes_host_activation(self):
+        session_start = self.script.index("SESSION_SCRIPT='\n")
+        localsearch_start = self.script.index('start_preview_localsearch() {', session_start)
+        localsearch_end = self.script.index('\n\nstart_preview_localsearch\n\nif', localsearch_start)
+        localsearch = self.script[localsearch_start:localsearch_end]
+        gvfs_call = self.script.index('\nstart_preview_gvfs\n', session_start)
+        localsearch_call = self.script.index('\nstart_preview_localsearch\n', localsearch_start)
+        first_gsettings = self.script.index('gsettings set org.gnome.desktop.interface color-scheme',
+                                            session_start)
+        activation_start = self.script.index('set_dbus_activation_environment() {', session_start)
+
+        self.assertLess(gvfs_call, localsearch_call)
+        self.assertLess(localsearch_call, first_gsettings)
+        self.assertLess(first_gsettings, activation_start)
+        self.assertIn('/usr/libexec/localsearch-3', localsearch)
+        self.assertIn('org.freedesktop.Tracker3.Miner.Files', localsearch)
+        self.assertIn('>"$NOVA_PREVIEW_LOCALSEARCH_LOG" 2>&1 &', localsearch)
+        self.assertIn('for attempt in {1..40}; do', localsearch)
+        self.assertIn('Preview pokračuje bez vlastního LocalSearch.', localsearch)
+        self.assertNotIn('org.freedesktop.systemd1', localsearch)
+        self.assertNotIn('NOVA_PREVIEW_HOST_', localsearch)
+        self.assertNotIn('ORIGINAL_', localsearch)
+        self.assertNotIn('NOVA_PREVIEW_LOCALSEARCH_PID', self.script)
+
+        for inherited in ('DBUS_STARTER_ADDRESS', 'DBUS_STARTER_BUS_TYPE'):
+            self.assertIn(f'-u {inherited}', localsearch)
+        for preview_value in (
+            'HOME="$HOME"',
+            'XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR"',
+            'XDG_CONFIG_HOME="$XDG_CONFIG_HOME"',
+            'XDG_DATA_HOME="$XDG_DATA_HOME"',
+            'XDG_CACHE_HOME="$XDG_CACHE_HOME"',
+            'XDG_STATE_HOME="$XDG_STATE_HOME"',
+            'DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS"',
+        ):
+            self.assertIn(preview_value, localsearch)
+
 
 
 @unittest.skipUnless(os.environ.get('NOVA_LIFECYCLE_TESTS') == '1', 'opt-in private D-Bus/dconf test')
@@ -220,8 +369,10 @@ class RealDconfPersistence(unittest.TestCase):
             self.assertEqual(settings.restore(root, 'tech'), 'restored')
             script = (REPO / 'dev-shell-preview.sh').read_text()
             startup = script.split("SESSION_SCRIPT='\n", 1)[1].split("\n'\n", 1)[0]
-            self.assertTrue(startup.endswith('exec gnome-shell --devkit --wayland'))
-            startup = startup.removesuffix('exec gnome-shell --devkit --wayland')
+            shell_command = ('exec gnome-shell --devkit --wayland '
+                             '--wayland-display="$NOVA_PREVIEW_WAYLAND_NAME"')
+            self.assertTrue(startup.endswith(shell_command))
+            startup = startup.removesuffix(shell_command)
             result = session(startup + '\n'
                              'gsettings get org.gnome.mutter dynamic-workspaces\n'
                              'gsettings get org.gnome.shell.extensions.dash-to-dock dock-position\n'

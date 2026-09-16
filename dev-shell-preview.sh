@@ -98,6 +98,9 @@ WATCH_PID=""
 WATCH_PGID=""
 PREVIEW_RESTORE_SETTINGS=0
 CLEANUP_DONE=0
+NOVA_PREVIEW_WAYLAND_NAME=""
+PREVIEW_WAYLAND_SOCKET=""
+PREVIEW_WAYLAND_BRIDGE=""
 
 is_bootstrap_fd() {
   local fd="${1:-}"
@@ -196,6 +199,10 @@ if [[ $STOP -ne 1 ]]; then
     echo "CHYBA: interní token Shell Preview je neplatný." >&2
     exit 1
   fi
+
+  NOVA_PREVIEW_WAYLAND_NAME="fedora-nova-preview-${NOVA_PREVIEW_TOKEN:0:8}"
+  PREVIEW_WAYLAND_SOCKET="$PREVIEW_SESSION_RUNTIME/$NOVA_PREVIEW_WAYLAND_NAME"
+  PREVIEW_WAYLAND_BRIDGE="$ORIGINAL_XDG_RUNTIME_DIR/$NOVA_PREVIEW_WAYLAND_NAME"
 fi
 
 is_pid() {
@@ -225,6 +232,19 @@ read_token_file() {
   [[ -s "$TOKEN_FILE" ]] && value="$(<"$TOKEN_FILE")"
   [[ "$value" =~ ^[0-9a-fA-F]{32}$ ]] && printf '%s\n' "$value"
   return 0
+}
+
+cleanup_preview_wayland_bridge() {
+  local token="${1:-${NOVA_PREVIEW_TOKEN:-}}" name target bridge actual_target
+  [[ "$token" =~ ^[0-9a-fA-F]{32}$ ]] || return 0
+
+  name="fedora-nova-preview-${token:0:8}"
+  target="$PREVIEW_SESSION_RUNTIME/$name"
+  bridge="$ORIGINAL_XDG_RUNTIME_DIR/$name"
+  [[ -L "$bridge" ]] || return 0
+  actual_target="$(readlink -- "$bridge")" || return 0
+  [[ "$actual_target" == "$target" ]] || return 0
+  rm -f -- "$bridge"
 }
 
 process_cmdline() {
@@ -564,6 +584,7 @@ stop_external_preview() {
     echo "VAROVÁNÍ: preview nastavení se nepodařilo uložit." >&2
   fi
 
+  cleanup_preview_wayland_bridge "$token"
   rm -rf "$LIVE_LOCK_DIR"
   rm -f "$SUPERVISOR_PID_FILE" "$TOKEN_FILE" "$WATCH_RESULT_FILE"
   echo "Shell Preview zastaveno."
@@ -589,7 +610,7 @@ ERR
   exit 1
 fi
 
-for command_name in dbus-run-session env setsid ps grep tr python3 readlink; do
+for command_name in dbus-run-session env setsid ps grep tr python3 readlink gdbus; do
   command -v "$command_name" >/dev/null 2>&1 || {
     echo "CHYBA: chybí $command_name." >&2
     exit 1
@@ -971,9 +992,36 @@ export_preview_env() {
   export NOVA_PREVIEW_HOST_XDG_DATA_DIRS="$ORIGINAL_XDG_DATA_DIRS"
   export NOVA_PREVIEW_HOST_XDG_RUNTIME_DIR="$ORIGINAL_XDG_RUNTIME_DIR"
   export NOVA_PREVIEW_SESSION_RUNTIME="$PREVIEW_SESSION_RUNTIME"
+  export NOVA_PREVIEW_WAYLAND_NAME="$NOVA_PREVIEW_WAYLAND_NAME"
+  export NOVA_PREVIEW_KEYRING_CONTROL_DIR="$PREVIEW_SESSION_RUNTIME/keyring-preview"
+  export NOVA_PREVIEW_KEYRING_LOG="$PREVIEW_SESSION_RUNTIME/keyring-preview.log"
+  export NOVA_PREVIEW_GVFS_LOG="$PREVIEW_SESSION_RUNTIME/gvfs-preview.log"
+  export NOVA_PREVIEW_LOCALSEARCH_LOG="$PREVIEW_SESSION_RUNTIME/localsearch-preview.log"
   export NOVA_PREVIEW_RESTORE_SETTINGS="$PREVIEW_RESTORE_SETTINGS"
   export NOVA_PREVIEW_SHELL_PID_FILE="$SHELL_CHILD_PID_FILE"
   export NOVA_PREVIEW_BMS_HELPER="$CORE/scripts/integrations/blur-my-shell.sh"
+}
+
+create_preview_wayland_bridge() {
+  local actual_target=""
+
+  [[ "$ORIGINAL_XDG_RUNTIME_DIR" == /* && -d "$ORIGINAL_XDG_RUNTIME_DIR" ]] || {
+    echo "CHYBA: host XDG runtime není dostupný pro Preview Wayland socket." >&2
+    return 1
+  }
+  if [[ -L "$PREVIEW_WAYLAND_BRIDGE" ]]; then
+    actual_target="$(readlink -- "$PREVIEW_WAYLAND_BRIDGE")" || return 1
+    if [[ "$actual_target" == "$PREVIEW_WAYLAND_SOCKET" ]]; then
+      return 0
+    fi
+    echo "CHYBA: Preview Wayland jméno už používá jiný socket; nic nepřepisuji." >&2
+    return 1
+  fi
+  if [[ -e "$PREVIEW_WAYLAND_BRIDGE" ]]; then
+    echo "CHYBA: Preview Wayland jméno už existuje; nic nepřepisuji." >&2
+    return 1
+  fi
+  ln -s -- "$PREVIEW_WAYLAND_SOCKET" "$PREVIEW_WAYLAND_BRIDGE"
 }
 
 print_banner() {
@@ -1013,6 +1061,126 @@ rm -f "$NOVA_PREVIEW_SHELL_PID_FILE"
   printf "%s\n" "$$" > "$NOVA_PREVIEW_SHELL_PID_FILE"
   chmod 600 "$NOVA_PREVIEW_SHELL_PID_FILE"
 )
+
+preview_dbus_name_has_owner() {
+  local name="$1" reply=""
+  reply="$(gdbus call --session \
+    --dest org.freedesktop.DBus \
+    --object-path /org/freedesktop/DBus \
+    --method org.freedesktop.DBus.NameHasOwner \
+    "$name" 2>/dev/null)" || return 1
+  [[ "$reply" == *"true"* ]]
+}
+
+start_preview_keyring() {
+  local attempt
+
+  if ! command -v gnome-keyring-daemon >/dev/null 2>&1; then
+    echo "VAROVÁNÍ: gnome-keyring-daemon není dostupný; Preview pokračuje bez Secret Service." >&2
+    return 0
+  fi
+  if ! mkdir -p "$NOVA_PREVIEW_KEYRING_CONTROL_DIR" ||
+      ! chmod 700 "$NOVA_PREVIEW_KEYRING_CONTROL_DIR"; then
+    echo "VAROVÁNÍ: nelze připravit izolovaný Preview keyring; Preview pokračuje bez Secret Service." >&2
+    return 0
+  fi
+
+  env \
+    -u GNOME_KEYRING_CONTROL \
+    -u SSH_AUTH_SOCK \
+    -u DBUS_STARTER_ADDRESS \
+    -u DBUS_STARTER_BUS_TYPE \
+    HOME="$HOME" \
+    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+    XDG_DATA_HOME="$XDG_DATA_HOME" \
+    XDG_CACHE_HOME="$XDG_CACHE_HOME" \
+    XDG_STATE_HOME="$XDG_STATE_HOME" \
+    DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
+    gnome-keyring-daemon \
+      --foreground \
+      --components=secrets \
+      --control-directory="$NOVA_PREVIEW_KEYRING_CONTROL_DIR" \
+      >"$NOVA_PREVIEW_KEYRING_LOG" 2>&1 &
+
+  for attempt in {1..40}; do
+    if preview_dbus_name_has_owner org.freedesktop.secrets; then
+      return 0
+    fi
+    sleep 0.05
+  done
+  echo "VAROVÁNÍ: izolovaný Preview keyring se nespustil včas; Preview pokračuje bez Secret Service." >&2
+  return 0
+}
+
+start_preview_keyring
+
+start_preview_gvfs() {
+  local attempt
+
+  if [[ ! -x /usr/libexec/gvfsd ]]; then
+    echo "VAROVÁNÍ: /usr/libexec/gvfsd není dostupný; Preview pokračuje bez vlastního GVFS." >&2
+    return 0
+  fi
+
+  env \
+    -u DBUS_STARTER_ADDRESS \
+    -u DBUS_STARTER_BUS_TYPE \
+    GVFS_DISABLE_FUSE=1 \
+    HOME="$HOME" \
+    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+    XDG_DATA_HOME="$XDG_DATA_HOME" \
+    XDG_CACHE_HOME="$XDG_CACHE_HOME" \
+    XDG_STATE_HOME="$XDG_STATE_HOME" \
+    DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
+    /usr/libexec/gvfsd \
+      >"$NOVA_PREVIEW_GVFS_LOG" 2>&1 &
+
+  for attempt in {1..40}; do
+    if preview_dbus_name_has_owner org.gtk.vfs.Daemon; then
+      return 0
+    fi
+    sleep 0.05
+  done
+  echo "VAROVÁNÍ: izolovaný Preview GVFS se nespustil včas; Preview pokračuje bez vlastního GVFS." >&2
+  return 0
+}
+
+start_preview_gvfs
+
+start_preview_localsearch() {
+  local attempt
+
+  if [[ ! -x /usr/libexec/localsearch-3 ]]; then
+    echo "VAROVÁNÍ: /usr/libexec/localsearch-3 není dostupný; Preview pokračuje bez vlastního LocalSearch." >&2
+    return 0
+  fi
+
+  env \
+    -u DBUS_STARTER_ADDRESS \
+    -u DBUS_STARTER_BUS_TYPE \
+    HOME="$HOME" \
+    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+    XDG_DATA_HOME="$XDG_DATA_HOME" \
+    XDG_CACHE_HOME="$XDG_CACHE_HOME" \
+    XDG_STATE_HOME="$XDG_STATE_HOME" \
+    DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
+    /usr/libexec/localsearch-3 \
+      >"$NOVA_PREVIEW_LOCALSEARCH_LOG" 2>&1 &
+
+  for attempt in {1..40}; do
+    if preview_dbus_name_has_owner org.freedesktop.Tracker3.Miner.Files; then
+      return 0
+    fi
+    sleep 0.05
+  done
+  echo "VAROVÁNÍ: izolovaný Preview LocalSearch se nespustil včas; Preview pokračuje bez vlastního LocalSearch." >&2
+  return 0
+}
+
+start_preview_localsearch
 
 if [[ "${NOVA_PREVIEW_RESTORE_SETTINGS:-0}" != "1" ]]; then
   gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" || true
@@ -1081,22 +1249,14 @@ set_dbus_activation_environment() {
     XDG_STATE_HOME="$NOVA_PREVIEW_HOST_XDG_STATE_HOME" \
     XDG_DATA_DIRS="$NOVA_PREVIEW_HOST_XDG_DATA_DIRS" \
     XDG_RUNTIME_DIR="$NOVA_PREVIEW_HOST_XDG_RUNTIME_DIR" \
-    WAYLAND_DISPLAY="$NOVA_PREVIEW_SESSION_RUNTIME/wayland-0"
+    WAYLAND_DISPLAY="$NOVA_PREVIEW_WAYLAND_NAME"
 }
 
-# GNOME Shell publishes its nested display while starting. Reapply the exact
-# activation environment after that point, before users can launch applications.
-(
-  if gdbus wait --session --timeout=10 org.gnome.Shell; then
-    if ! set_dbus_activation_environment; then
-      echo "VAROVÁNÍ: Nepodařilo se připravit host prostředí pro D-Bus aktivované aplikace." >&2
-    fi
-  else
-    echo "VAROVÁNÍ: Nested GNOME Shell se nepřihlásil na D-Bus včas." >&2
-  fi
-) &
+if ! set_dbus_activation_environment; then
+  echo "VAROVÁNÍ: Nepodařilo se připravit host prostředí pro D-Bus aktivované aplikace." >&2
+fi
 
-exec gnome-shell --devkit --wayland
+exec gnome-shell --devkit --wayland --wayland-display="$NOVA_PREVIEW_WAYLAND_NAME"
 '
 
 record_session_metadata() {
@@ -1130,7 +1290,10 @@ record_session_metadata() {
 start_shell() {
   load_profile
   prepare_preview_root || return $?
+  python3 "$ROOT/dev-tools/preview_ibus_portal.py" --prepare "$PREVIEW_ROOT" \
+    --wayland "$NOVA_PREVIEW_WAYLAND_NAME" || return $?
   export_preview_env
+  create_preview_wayland_bridge || return $?
   print_banner
 
   rm -f "$SHELL_CHILD_PID_FILE"
@@ -1295,6 +1458,10 @@ cleanup() {
   else
     shell_rc=$?
     echo "VAROVÁNÍ: preview session nebyla bezpečně uklizena; runtime metadata ponechávám." >&2
+  fi
+
+  if [[ "$shell_rc" -eq 0 ]]; then
+    cleanup_preview_wayland_bridge
   fi
 
   if [[ "$watcher_rc" -ne 0 || "$shell_rc" -ne 0 ]]; then
