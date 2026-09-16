@@ -1,76 +1,46 @@
 # Development integration and next steps
 
-## Baseline inspected on 2026-09-12
+## Current baseline
 
-The two local working directories are Git worktrees of the same repository,
-`marek666/Fedora-nova`, rather than separate application and runtime repositories.
-Keep `app/` and `core/` together so one revision describes the complete preview.
-The following relationships were verified against local refs; fetch and check
-the remote refs again before merging.
+`development` is the integration branch for the next Fedora Nova release and `main` is reserved for stable releases. Keep `app/` and `core/` in the same revision so one commit describes the complete Settings, runtime and Shell Preview state.
 
-Remote refs were fetched during this integration. GTK3 commit `bb3b6d3` has
-now been merged without conflicts as `c317a04` on
-`fix/preview-reload-persistence`, after startup-source fix `f04d823`.
-The table below records the starting points, not additional merges to perform.
+Use dedicated feature or fix branches for isolated work and merge them back into `development` only after the relevant static, regression and interactive checks pass. Avoid copying files between worktrees or relying on globally installed development helpers when the current checkout provides them.
 
-| Branch | Role and integration |
-| --- | --- |
-| `development` (`40568ad`) | Next-release integration base |
-| `fix/preview-reload-persistence` (`dc448d7`) | Contains the current stability and synchronous reload changes; use as the next integration candidate, plus the startup SCSS fix |
-| `fix/shell-preview-stability` (`ee0511d`) | Already an ancestor of the integration candidate |
-| `origin/fix/shell-preview-reload` (`bc567c0`) | Already merged into the integration candidate |
-| `theme/gtk3-csd-titlebar` (`bb3b6d3`) | One remaining commit outside the candidate, changing `core/scripts/gtk-theme.sh`; review separately after preview integration |
-
-Do not merge the stability and reload branches again or copy files between
-working directories. Submit the tested integration candidate to `development`,
-with the GTK3 merge included. Keep `main` for releases.
-Retain old branches until integration and the interactive smoke checks pass.
+The 0.8.0-dev baseline already includes the repository cleanup, current-checkout Builder workflow, isolated Native Preview, explicit Native Host, Preview-only Flatpak development build, nested Mutter Development Kit Shell Preview, and selective theme hot reload.
 
 ## Daily development
 
-Use a persistent checkout for `development` and a separate worktree per active
-change, with branches such as `codex/hover-consistency`. Start the preview from
-the same worktree that is open in the editor:
+Use a persistent checkout for `development` and a separate worktree per active change. Start the Shell Preview from the same worktree that is open in the editor:
 
 ```bash
 ./dev-shell-preview.sh --watch tech
 ```
 
-The startup banner prints the source directory. The preview runtime is shared
-per user cache directory, so use one Shell Preview at a time when switching
-worktrees. Stop the old preview before launching from a different worktree.
+The startup banner prints the source directory. The preview runtime is shared per user cache directory, so use one normal Shell Preview at a time when switching worktrees. Stop the old preview before launching from another worktree, or use a separate `XDG_CACHE_HOME` for an intentional second test session.
 
-Startup, restart and incremental theme reload now build the selected theme with
-the same staging function. Default `circle` and `squircle` modes use SCSS;
-other selected modes apply the Python runtime generators over those layers.
-Consequently, edits to `_hover-circle.scss` are visible with `circle` selected.
-Editing `hover_style.py` does not override the default circle SCSS during reload.
-Use `--reset-settings` deliberately if clean profile defaults are needed.
+Preview startup, restart and incremental theme reload build the selected theme through the same staging pipeline. The default `circle` hover remains owned by Sass; non-default hover modes are applied by the Python runtime renderer. Edits to `_hover-circle.scss` should therefore be visible with `circle` selected.
 
-Generated staging output stays outside tracked runtime themes. Compile release
-theme output intentionally with `core/scripts/build-theme-sass.sh --apply`.
-Startup now requires a Sass compiler, just like live reload. Invalid source
-markers or compilation errors also stop a fallback restart with a diagnostic;
-the launcher no longer starts the checked-in theme while ignoring those errors.
+Generated staging output stays outside tracked runtime themes. Compile release theme output intentionally with:
 
-## Delivery sequence
+```bash
+core/scripts/build-theme-sass.sh --apply
+```
 
-1. **Reliable preview and integration.** Verify a visible SCSS change after save,
-   then after a forced restart and stop/start. Confirm profile settings survive,
-   reload keeps the Shell PID, and unsafe changes still trigger a restart.
-   Run `./check.sh`, the reload/bridge/refresh suites and opt-in lifecycle tests.
-   Complete interactive verification before merging into `development`.
-2. **Hover consistency.** Define the desired grid, dock and Show Applications
-   appearance. Resolve duplicated SCSS/Python circle styling and the currently
-   unused `grid_halo`/`dock_halo` renderer parameters. Check circle, compact, tile
-   and none across built-in profiles, both after startup and live changes.
-   Keep this visual change separate from reload lifecycle fixes.
-3. **GTK3 titlebars.** Integrate and test the remaining GTK3 commit on the new
-   base, including enabled/disabled GTK mode and existing GTK4 behavior.
-4. **Release validation.** Run the complete regression suite and interactive
-   Native Preview, explicit Host, Builder/Flatpak and Shell Preview checks from
-   a clean checkout. Update the changelog and compiled themes before release.
+Invalid source markers or compilation errors must stop a fallback restart with a diagnostic rather than silently using stale checked-in CSS.
 
-Track each numbered item as a separate reviewable change with its acceptance
-checks. Schedule the next feature only after the current item meets those
-checks; the immediate priority is a trustworthy visual development loop.
+## Extension and appearance ownership
+
+Fedora Nova owns visual appearance. Extensions should provide behavior and effects without competing theme layers where that can be configured safely.
+
+For Blur My Shell, Fedora Nova keeps blur functionality intact and sets the overview `style-components` value to `0`. The integration stores the original value once and can restore it during uninstall without overwriting a conflicting manual change. Host mode and the isolated Shell Preview use the same integration helper but separate XDG configuration roots.
+
+Dash to Dock remains responsible for dock behavior. Fedora Nova disables its custom theme layer where possible and owns the dock appearance through the Nova theme and profile settings.
+
+## Current delivery sequence
+
+1. **Visual consistency.** Continue aligning app-grid, dock, Show Applications, Quick Settings and related Shell surfaces across built-in profiles. Keep default hover styling in Sass and avoid extension-specific CSS wars when an extension exposes a clean compatibility setting.
+2. **Integration verification.** For changes involving Blur My Shell, Dash to Dock or other extensions, verify both Native Host and isolated Shell Preview behavior, repeated application, manual user changes and uninstall/restore ownership.
+3. **GTK compatibility.** Keep the managed GTK4/libadwaita color layer conservative and test the broader GTK3 compatibility layer, especially CSD titlebars and applications such as virt-manager.
+4. **Release validation.** Run `./check.sh`, the complete regression/lifecycle suite, and the interactive Native Preview, Native Host, Flatpak Preview and Shell Preview smoke checks from a clean checkout. Update the changelog and compiled themes before release.
+
+Track each item as a separate reviewable change with explicit acceptance checks. Prefer a trustworthy visual development loop over large mixed refactors.

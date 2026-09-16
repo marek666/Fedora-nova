@@ -58,7 +58,8 @@ restore_snapshot() {
       dconf load "$path" < "$dir/dconf/$file.dconf"
     fi
   }
-  # Uloží místní hodnotu BMS před načtením snapshotu.
+  # Ensure a pre-Nova BMS backup exists before loading snapshot settings.
+  # An existing backup remains authoritative and is never overwritten here.
   if ! bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply; then
     warn "Před obnovou snapshotu se nepodařilo uložit stav Blur My Shell; pokračuji."
   fi
@@ -75,7 +76,7 @@ restore_snapshot() {
   for f in current-profile previous-profile current-dock previous-dock current-motion previous-motion current-curve previous-curve current-icons current-hover previous-hover current-gtk; do
     [[ -f "$dir/$f" ]] && cp "$dir/$f" "$NOVA_CONFIG_DIR/$f"
   done
-  # Snapshot mohl znovu načíst stylování komponent BMS.
+  # Snapshot data may re-enable BMS overview component styling.
   if ! bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply; then
     warn "Po obnově snapshotu se nepodařilo nastavit kompatibilitu Blur My Shell; pokračuji."
   fi

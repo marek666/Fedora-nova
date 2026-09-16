@@ -29,7 +29,7 @@ release blocker requires another cleanup change.
 - [x] run the full default regression suite in CI with required dependencies
 - [x] keep Shell Preview development checkout-local instead of installing a global helper
 - [x] fix the post-audit clean-state CLI/runtime regressions found after the structural cleanup
-- [x] verify a completely fresh `development` clone with `./check.sh` and all 160 regression/lifecycle tests enabled
+- [x] verify a completely fresh `development` clone with `./check.sh` and the complete regression/lifecycle suite enabled
 
 ## Intentional compatibility surface
 

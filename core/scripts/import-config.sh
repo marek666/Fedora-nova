@@ -33,7 +33,8 @@ PAYLOAD="$TMP/fedora-nova-export"
 [[ -f "$PAYLOAD/manifest.txt" ]] || die "Nejde o Fedora Nova export."
 
 "$SCRIPT_DIR/backup-settings.sh" >/dev/null
-# Uloží místní hodnotu BMS před načtením nastavení z importu.
+# Ensure a pre-Nova BMS backup exists before loading imported settings.
+# An existing backup remains authoritative and is never overwritten here.
 if ! bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply; then
   warn "Před importem se nepodařilo uložit stav Blur My Shell; pokračuji."
 fi
@@ -75,7 +76,7 @@ if [[ -d "$PAYLOAD/custom/palettes" ]]; then
   cp -a "$PAYLOAD/custom/palettes/." "$NOVA_PTYXIS_DIR/"
 fi
 
-# Import mohl znovu načíst stylování komponent BMS.
+# Imported data may re-enable BMS overview component styling.
 if ! bash "$SCRIPT_DIR/integrations/blur-my-shell.sh" apply; then
   warn "Po importu se nepodařilo nastavit kompatibilitu Blur My Shell; pokračuji."
 fi

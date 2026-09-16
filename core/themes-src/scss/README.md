@@ -12,12 +12,14 @@ CSS.
 Current Sass coverage:
 
 - `NOVA_CURVE` layer,
-- `NOVA_HOVER` circle layer,
+- `NOVA_HOVER` default circle layer,
 - profile color tokens for the built-in themes.
 
-Preview startup and hot reload always regenerate `NOVA_HOVER` with
-`core/scripts/hover_style.py`, including the default `circle` mode. Edit that
-Python generator to change the hover appearance in the preview.
+Preview startup, restart and incremental theme reload build the selected theme
+through the same Sass staging pipeline. The default `circle` hover remains
+owned by `_hover-circle.scss`; non-default hover modes are applied by
+`core/scripts/hover_style.py` when selected. Edit the SCSS layer to change the
+default circle appearance.
 
 Compile and validate the Sass layers:
 

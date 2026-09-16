@@ -30,7 +30,14 @@
 - added Builder workflow regression tests,
 - verified GNOME Builder 50 Build + Run with GNOME Platform/SDK 50,
 - verified Flatpak build, install and AppStream composition,
-- verified hot-reload unit and lifecycle suites after the Builder changes.
+- verified hot-reload unit and lifecycle suites after the Builder changes,
+- added Blur My Shell compatibility that keeps blur effects while disabling its
+  competing overview component styling,
+- preserves the original BMS `style-components` value for safe uninstall and
+  manual-conflict-aware restore,
+- added BMS integration diagnostics and regression tests,
+- refreshed project documentation in English and aligned the hover, GTK and
+  Sass documentation with the current 0.8.0-dev runtime.
 
 ## 0.7.2-dev — Full System Setup
 

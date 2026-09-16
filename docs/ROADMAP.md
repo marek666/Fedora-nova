@@ -12,7 +12,7 @@ Current development focus:
 
 The structural repository cleanup is complete for the current 0.8.0-dev baseline. Cleanup is no longer the default workstream.
 
-A fresh `development` clone has been verified with `./check.sh` and the complete 160-test regression/lifecycle suite. The remaining pre-release verification is the full interactive Preview/Host/Flatpak/Shell smoke on a clean checkout.
+A fresh `development` clone has been verified with `./check.sh` and the complete regression/lifecycle suite. The remaining pre-release verification is the full interactive Preview/Host/Flatpak/Shell smoke on a clean checkout.
 
 ## Preview development
 
@@ -88,14 +88,16 @@ fedora-nova terminal restore
 
 The Settings application should use the same backend as the CLI.
 
-## Themes
+## Themes and extensions
 
 Current state:
 
 - selective theme hot reload is integrated,
 - inotify and polling collectors are covered by lifecycle tests,
 - full nested Shell restart remains the conservative fallback,
-- the preview uses the current checkout and isolated Shell configuration.
+- the preview uses the current checkout and isolated Shell configuration,
+- Blur My Shell compatibility keeps blur effects while disabling its competing overview component styling,
+- Fedora Nova owns the default hover appearance through its Sass layer.
 
 Planned work:
 
@@ -104,7 +106,7 @@ Planned work:
 - improve profile consistency and visual coherence,
 - reduce GNOME Shell CSS parser warnings as part of theme work rather than a separate cleanup phase,
 - investigate Dash to Dock theme-node warnings when they affect visible theme behaviour,
-- continue testing theme compatibility against current GNOME Shell releases.
+- continue testing theme and extension compatibility against current GNOME Shell releases.
 
 ## Packaging and runtime boundary
 

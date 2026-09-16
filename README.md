@@ -17,12 +17,12 @@ docs/       design, Builder workflow, roadmap and development notes
 .github/    CI
 ```
 
-Development entry points remain in the repository root while the 0.8.0 preview infrastructure is being stabilized.
+Development entry points remain in the repository root and use the current checkout directly.
 
 ## Development
 
 See [development integration and next steps](docs/DEVELOPMENT-PLAN.md) for the
-current branch integration order and preview verification checklist.
+current workflow, ownership rules, and release verification checklist.
 
 Install the Fedora development dependencies:
 
@@ -89,10 +89,10 @@ from the host at:
 
 The host profile application, configuration import, and snapshot restore also
 run `apply`. Import and snapshot restore run it before and after loading BMS
-dconf data: the first call captures the local original value and the second
-enforces Nova compatibility after the imported data is loaded. The installer
-reaches the same path through `apply-preset`; `--no-apply` installs files
-without changing BMS settings.
+dconf data. The first call ensures that a pre-Nova backup exists without
+overwriting an existing backup; the second re-enforces Nova compatibility after
+the imported data is loaded. The installer reaches the same path through
+`apply-preset`; `--no-apply` installs files without changing BMS settings.
 
 Normal uninstallation runs `restore` before removing Nova configuration. With
 `--restore`, the full dconf backup is authoritative and restores BMS together
@@ -176,16 +176,22 @@ See:
 docs/BUILDER.md
 ```
 
-The Builder workflow is currently being cleaned up for Fedora Nova 0.8.0.
+The Builder workflow is tested for Fedora Nova 0.8.0-dev and keeps Flatpak Preview, Native Preview, Native Host, and Shell Preview intentionally separate.
 
 ## Documentation
 
 - `CHANGELOG.md`
+- `CLEANUP.md`
+- `CONTRIBUTING.md`
 - `docs/BUILDER.md`
+- `docs/DASH-TO-DOCK-PREVIEW.md`
 - `docs/DESIGN.md`
+- `docs/DEVELOPMENT-PLAN.md`
 - `docs/GTK.md`
 - `docs/ROADMAP.md`
 - `docs/SOURCES.md`
+- `core/themes-src/README.md`
+- `core/themes-src/scss/README.md`
 
 ## Branches
 
