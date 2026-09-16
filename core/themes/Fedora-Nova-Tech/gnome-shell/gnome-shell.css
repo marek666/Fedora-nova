@@ -521,7 +521,6 @@ stage {
 .app-folder-dialog {
   background-color: transparent;
   background-image: url("assets/app-folder-squircle.svg") !important;
-  border: 0;
   border-radius: 0;
   box-shadow: none;
 }

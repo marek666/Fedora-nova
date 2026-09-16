@@ -1,0 +1,6 @@
+{
+  "uuid": "folder-layout-preview@fedora-nova",
+  "name": "Fedora Nova Preview Folder Layout",
+  "description": "Responsive app-folder SVG background sizing for nested Preview only.",
+  "shell-version": ["50"]
+}

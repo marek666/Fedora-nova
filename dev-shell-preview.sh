@@ -636,6 +636,7 @@ DOCK_UUID="dash-to-dock@micxgx.gmail.com"
 TOPBAR_UUID="topbar-all-monitors@fa8i.github.io"
 TOPBAR_SOURCE="$CORE/third-party/topbar-all-monitors/$TOPBAR_UUID"
 BMS_UUID="blur-my-shell@aunetx"
+FOLDER_LAYOUT_UUID="folder-layout-preview@fedora-nova"
 
 if [[ ! -d "/usr/share/gnome-shell/extensions/$USER_THEME_UUID" ]]; then
   cat >&2 <<EOF
@@ -860,6 +861,10 @@ prepare_preview_root() {
       "/usr/share/gnome-shell/extensions/$DOCK_UUID" \
       "$PREVIEW_DATA/gnome-shell/extensions/$DOCK_UUID" || return $?
   fi
+
+  mkdir -p "$PREVIEW_DATA/gnome-shell/extensions/$FOLDER_LAYOUT_UUID"
+  cp -a "$ROOT/dev-tools/folder-layout-preview/." "$PREVIEW_DATA/gnome-shell/extensions/$FOLDER_LAYOUT_UUID/"
+  cp "$CORE/themes-src/js/squircle.js" "$PREVIEW_DATA/gnome-shell/extensions/$FOLDER_LAYOUT_UUID/squircle.js"
 
   cp -a "$CORE/themes/." "$PREVIEW_DATA/themes/"
   cp -a "$CORE/assets/wallpapers/." "$PREVIEW_DATA/backgrounds/fedora-nova/"
@@ -1223,6 +1228,19 @@ if [[ "${NOVA_PREVIEW_RESTORE_SETTINGS:-0}" != "1" ]]; then
   fi
 
   gsettings set org.gnome.shell enabled-extensions "$NOVA_PREVIEW_EXTENSIONS"
+fi
+
+# This experimental extension is deliberately enabled only by the Preview launcher.
+folder_extension="folder-layout-preview@fedora-nova"
+preview_extensions="$(gsettings get org.gnome.shell enabled-extensions)"
+if [[ "$preview_extensions" != *"$folder_extension"* ]]; then
+  preview_extensions="${preview_extensions#@as }"
+  if [[ "$preview_extensions" == "[]" ]]; then
+    preview_extensions="[\"$folder_extension\"]"
+  else
+    preview_extensions="${preview_extensions%]}, \"$folder_extension\"]"
+  fi
+  gsettings set org.gnome.shell enabled-extensions "$preview_extensions"
 fi
 
 if gsettings writable org.gnome.shell welcome-dialog-last-shown-version >/dev/null 2>&1; then
