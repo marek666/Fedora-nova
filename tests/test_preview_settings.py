@@ -135,15 +135,58 @@ class ShellPreviewPersistenceWiring(unittest.TestCase):
         bms_dash_blur = (
             'org.gnome.shell.extensions.blur-my-shell.dash-to-dock blur false'
         )
+        bms_panel_blur = (
+            'org.gnome.shell.extensions.blur-my-shell.panel blur false'
+        )
         extensions = 'gsettings set org.gnome.shell enabled-extensions'
         self.assertIn(bms_settings_version, guarded)
         self.assertIn(bms_dash_blur, guarded)
+        self.assertIn(bms_panel_blur, guarded)
         self.assertLess(guarded.index(bms_settings_version), guarded.index(bms_dash_blur))
         self.assertLess(guarded.index(bms_dash_blur), guarded.index(extensions))
+        self.assertLess(guarded.index(bms_panel_blur), guarded.index(extensions))
         self.assertIn('org.gnome.shell enabled-extensions', guarded)
         after = self.script[end:]
+        self.assertNotIn(bms_panel_blur, after)
         self.assertNotIn('org.gnome.shell enabled-extensions', after)
         self.assertIn('org.gnome.shell.extensions.user-theme name', after)
+
+    def test_dbus_activated_apps_get_host_files_but_keep_preview_session(self):
+        shell_environment = self.script[self.script.index('export_preview_env() {'):
+                                        self.script.index('\nprint_banner() {')]
+        for assignment in (
+            'export HOME="$PREVIEW_HOME"',
+            'export XDG_CONFIG_HOME="$PREVIEW_CONFIG"',
+            'export XDG_DATA_HOME="$PREVIEW_DATA"',
+            'export XDG_CACHE_HOME="$PREVIEW_CACHE"',
+            'export XDG_STATE_HOME="$PREVIEW_STATE"',
+            'export XDG_RUNTIME_DIR="$PREVIEW_SESSION_RUNTIME"',
+        ):
+            self.assertIn(assignment, shell_environment)
+
+        start = self.script.index('set_dbus_activation_environment() {')
+        end = self.script.index('\n\nexec gnome-shell --devkit --wayland', start)
+        activation_environment = self.script[start:end]
+        self.assertIn('gdbus wait --session --timeout=10 org.gnome.Shell',
+                      activation_environment)
+        for assignment in (
+            'HOME="$NOVA_PREVIEW_HOST_HOME"',
+            'XDG_CONFIG_HOME="$NOVA_PREVIEW_HOST_XDG_CONFIG_HOME"',
+            'XDG_DATA_HOME="$NOVA_PREVIEW_HOST_XDG_DATA_HOME"',
+            'XDG_CACHE_HOME="$NOVA_PREVIEW_HOST_XDG_CACHE_HOME"',
+            'XDG_STATE_HOME="$NOVA_PREVIEW_HOST_XDG_STATE_HOME"',
+            'XDG_DATA_DIRS="$NOVA_PREVIEW_HOST_XDG_DATA_DIRS"',
+            'XDG_RUNTIME_DIR="$NOVA_PREVIEW_HOST_XDG_RUNTIME_DIR"',
+            'WAYLAND_DISPLAY="$NOVA_PREVIEW_SESSION_RUNTIME/wayland-0"',
+        ):
+            self.assertIn(assignment, activation_environment)
+        activation_lines = activation_environment.splitlines()
+        for forbidden in (
+            'DBUS_SESSION_BUS_ADDRESS=',
+            'DISPLAY=',
+        ):
+            self.assertFalse(any(line.lstrip().startswith(forbidden)
+                                 for line in activation_lines))
 
 
 @unittest.skipUnless(os.environ.get('NOVA_LIFECYCLE_TESTS') == '1', 'opt-in private D-Bus/dconf test')

@@ -52,9 +52,12 @@ RESET_SETTINGS=0
 ORIGINAL_HOME="${HOME:?}"
 ORIGINAL_HOME_REAL="$(readlink -m -- "$ORIGINAL_HOME")"
 ORIGINAL_PATH="${PATH:-/usr/local/bin:/usr/bin:/bin}"
+ORIGINAL_XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$ORIGINAL_HOME/.config}"
 ORIGINAL_XDG_DATA_HOME="${XDG_DATA_HOME:-$ORIGINAL_HOME/.local/share}"
 ORIGINAL_XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
-ORIGINAL_XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}"
+ORIGINAL_XDG_CACHE_HOME="${XDG_CACHE_HOME:-$ORIGINAL_HOME/.cache}"
+ORIGINAL_XDG_STATE_HOME="${XDG_STATE_HOME:-$ORIGINAL_HOME/.local/state}"
+ORIGINAL_XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 ORIGINAL_PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-$ORIGINAL_XDG_RUNTIME_DIR}"
 ORIGINAL_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}"
 # Mutter Devkit's window still needs the parent compositor after we give the
@@ -960,6 +963,14 @@ export_preview_env() {
   export NOVA_PREVIEW_DOCK_COLOR="$DOCK_COLOR"
   export NOVA_PREVIEW_DOCK_OPACITY="$DOCK_OPACITY"
   export NOVA_PREVIEW_DOCK_SIZE="$DOCK_SIZE"
+  export NOVA_PREVIEW_HOST_HOME="$ORIGINAL_HOME"
+  export NOVA_PREVIEW_HOST_XDG_CONFIG_HOME="$ORIGINAL_XDG_CONFIG_HOME"
+  export NOVA_PREVIEW_HOST_XDG_DATA_HOME="$ORIGINAL_XDG_DATA_HOME"
+  export NOVA_PREVIEW_HOST_XDG_CACHE_HOME="$ORIGINAL_XDG_CACHE_HOME"
+  export NOVA_PREVIEW_HOST_XDG_STATE_HOME="$ORIGINAL_XDG_STATE_HOME"
+  export NOVA_PREVIEW_HOST_XDG_DATA_DIRS="$ORIGINAL_XDG_DATA_DIRS"
+  export NOVA_PREVIEW_HOST_XDG_RUNTIME_DIR="$ORIGINAL_XDG_RUNTIME_DIR"
+  export NOVA_PREVIEW_SESSION_RUNTIME="$PREVIEW_SESSION_RUNTIME"
   export NOVA_PREVIEW_RESTORE_SETTINGS="$PREVIEW_RESTORE_SETTINGS"
   export NOVA_PREVIEW_SHELL_PID_FILE="$SHELL_CHILD_PID_FILE"
   export NOVA_PREVIEW_BMS_HELPER="$CORE/scripts/integrations/blur-my-shell.sh"
@@ -1027,6 +1038,11 @@ if [[ "${NOVA_PREVIEW_RESTORE_SETTINGS:-0}" != "1" ]]; then
     gsettings set org.gnome.shell.extensions.dash-to-dock hot-keys false || true
   fi
 
+  # Blur My Shell panel blur currently triggers Clutter allocation
+  # warnings in nested Mutter Preview. Keep host settings untouched.
+  if gsettings writable org.gnome.shell.extensions.blur-my-shell.panel blur >/dev/null 2>&1; then
+    gsettings set org.gnome.shell.extensions.blur-my-shell.panel blur false || true
+  fi
   # Blur My Shell: seed the current settings format before enabling BMS.
   # Its 1 -> 2 migration otherwise turns Dash to Dock blur back on.
   if gsettings writable org.gnome.shell.extensions.blur-my-shell settings-version >/dev/null 2>&1; then
@@ -1053,6 +1069,32 @@ gsettings set org.gnome.shell.extensions.user-theme name "$NOVA_PREVIEW_THEME"
 if ! bash "$NOVA_PREVIEW_BMS_HELPER" apply; then
   echo "VAROVÁNÍ: Integraci Blur My Shell se nepodařilo aplikovat; preview pokračuje." >&2
 fi
+
+# D-Bus-activated applications use host XDG locations and runtime. Their bus
+# stays nested, while an absolute Preview Wayland socket keeps windows inside.
+set_dbus_activation_environment() {
+  dbus-update-activation-environment \
+    HOME="$NOVA_PREVIEW_HOST_HOME" \
+    XDG_CONFIG_HOME="$NOVA_PREVIEW_HOST_XDG_CONFIG_HOME" \
+    XDG_DATA_HOME="$NOVA_PREVIEW_HOST_XDG_DATA_HOME" \
+    XDG_CACHE_HOME="$NOVA_PREVIEW_HOST_XDG_CACHE_HOME" \
+    XDG_STATE_HOME="$NOVA_PREVIEW_HOST_XDG_STATE_HOME" \
+    XDG_DATA_DIRS="$NOVA_PREVIEW_HOST_XDG_DATA_DIRS" \
+    XDG_RUNTIME_DIR="$NOVA_PREVIEW_HOST_XDG_RUNTIME_DIR" \
+    WAYLAND_DISPLAY="$NOVA_PREVIEW_SESSION_RUNTIME/wayland-0"
+}
+
+# GNOME Shell publishes its nested display while starting. Reapply the exact
+# activation environment after that point, before users can launch applications.
+(
+  if gdbus wait --session --timeout=10 org.gnome.Shell; then
+    if ! set_dbus_activation_environment; then
+      echo "VAROVÁNÍ: Nepodařilo se připravit host prostředí pro D-Bus aktivované aplikace." >&2
+    fi
+  else
+    echo "VAROVÁNÍ: Nested GNOME Shell se nepřihlásil na D-Bus včas." >&2
+  fi
+) &
 
 exec gnome-shell --devkit --wayland
 '
