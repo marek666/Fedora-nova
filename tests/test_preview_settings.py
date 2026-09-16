@@ -129,6 +129,17 @@ class ShellPreviewPersistenceWiring(unittest.TestCase):
         self.assertIn('org.gnome.desktop.interface accent-color', guarded)
         self.assertIn('org.gnome.mutter dynamic-workspaces', guarded)
         self.assertIn('org.gnome.shell.extensions.dash-to-dock dock-position', guarded)
+        bms_settings_version = (
+            'org.gnome.shell.extensions.blur-my-shell settings-version 2'
+        )
+        bms_dash_blur = (
+            'org.gnome.shell.extensions.blur-my-shell.dash-to-dock blur false'
+        )
+        extensions = 'gsettings set org.gnome.shell enabled-extensions'
+        self.assertIn(bms_settings_version, guarded)
+        self.assertIn(bms_dash_blur, guarded)
+        self.assertLess(guarded.index(bms_settings_version), guarded.index(bms_dash_blur))
+        self.assertLess(guarded.index(bms_dash_blur), guarded.index(extensions))
         self.assertIn('org.gnome.shell enabled-extensions', guarded)
         after = self.script[end:]
         self.assertNotIn('org.gnome.shell enabled-extensions', after)

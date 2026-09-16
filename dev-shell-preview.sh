@@ -611,6 +611,7 @@ USER_THEME_UUID="user-theme@gnome-shell-extensions.gcampax.github.com"
 DOCK_UUID="dash-to-dock@micxgx.gmail.com"
 TOPBAR_UUID="topbar-all-monitors@fa8i.github.io"
 TOPBAR_SOURCE="$CORE/third-party/topbar-all-monitors/$TOPBAR_UUID"
+BMS_UUID="blur-my-shell@aunetx"
 
 if [[ ! -d "/usr/share/gnome-shell/extensions/$USER_THEME_UUID" ]]; then
   cat >&2 <<EOF
@@ -628,6 +629,9 @@ if [[ -d "/usr/share/gnome-shell/extensions/$DOCK_UUID" ]]; then
 fi
 if [[ -d "$TOPBAR_SOURCE" ]]; then
   ENABLED+=", '$TOPBAR_UUID'"
+fi
+if [[ -d "/usr/share/gnome-shell/extensions/$BMS_UUID" ]]; then
+  ENABLED+=", '$BMS_UUID'"
 fi
 ENABLED+="]"
 
@@ -1019,7 +1023,21 @@ if [[ "${NOVA_PREVIEW_RESTORE_SETTINGS:-0}" != "1" ]]; then
     gsettings set org.gnome.shell.extensions.dash-to-dock custom-background-color true || true
     gsettings set org.gnome.shell.extensions.dash-to-dock background-color "$NOVA_PREVIEW_DOCK_COLOR" || true
     gsettings set org.gnome.shell.extensions.dash-to-dock background-opacity "$NOVA_PREVIEW_DOCK_OPACITY" || true
+    # Preview-only: avoid Super+1..0 keybinding collisions in nested Mutter.
+    gsettings set org.gnome.shell.extensions.dash-to-dock hot-keys false || true
   fi
+
+  # Blur My Shell: seed the current settings format before enabling BMS.
+  # Its 1 -> 2 migration otherwise turns Dash to Dock blur back on.
+  if gsettings writable org.gnome.shell.extensions.blur-my-shell settings-version >/dev/null 2>&1; then
+    gsettings set org.gnome.shell.extensions.blur-my-shell settings-version 2 || true
+  fi
+
+  # Dash to Dock blur creates unsafe actors in nested Preview.
+  if gsettings writable org.gnome.shell.extensions.blur-my-shell.dash-to-dock blur >/dev/null 2>&1; then
+    gsettings set org.gnome.shell.extensions.blur-my-shell.dash-to-dock blur false || true
+  fi
+
   gsettings set org.gnome.shell enabled-extensions "$NOVA_PREVIEW_EXTENSIONS"
 fi
 
