@@ -19,6 +19,20 @@ docs/       design, Builder workflow, roadmap and development notes
 
 Development entry points remain in the repository root and use the current checkout directly.
 
+## Safe host install, upgrade, and rollback
+
+Installer V2 performs a manifest-driven user-local reinstall with a backup
+before every managed-file change. Always inspect the read-only plan first:
+
+```bash
+./install.sh --dry-run
+```
+
+After reviewing it, use `./install.sh --install`. Validation and rollback are
+available through `--validate` and `--rollback BACKUP`. Do not run the installer
+with `sudo`. See [Installer V2](docs/INSTALLER-V2.md) for the ownership model,
+legacy footprint, preserved settings, backups, and uninstall workflow.
+
 ## Development
 
 See [development integration and next steps](docs/DEVELOPMENT-PLAN.md) for the

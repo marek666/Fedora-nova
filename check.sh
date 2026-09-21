@@ -13,7 +13,8 @@ mkdir -p "$ROOT/.dev-build/pycache"
 PYTHONPYCACHEPREFIX="$ROOT/.dev-build/pycache" \
 python3 -m compileall -q \
   "$ROOT/app/src/fedora_nova" \
-  "$ROOT/core/scripts"
+  "$ROOT/core/scripts" \
+  "$ROOT/installer"
 
 if command -v sassc >/dev/null 2>&1 || command -v sass >/dev/null 2>&1; then
   "$ROOT/core/scripts/build-theme-sass.sh" --check >/dev/null
