@@ -71,6 +71,7 @@ PREVIEW_ROOT="${XDG_CACHE_HOME:-$ORIGINAL_HOME/.cache}/fedora-nova-shell-preview
 PREVIEW_HOME="$PREVIEW_ROOT/home"
 PREVIEW_CONFIG="$PREVIEW_ROOT/config"
 PREVIEW_DATA="$PREVIEW_ROOT/data"
+PREVIEW_SYSTEM_DATA="$PREVIEW_ROOT/system-data"
 PREVIEW_CACHE="$PREVIEW_ROOT/cache"
 PREVIEW_STATE="$PREVIEW_ROOT/state"
 PREVIEW_SESSION_RUNTIME="$PREVIEW_ROOT/session-runtime"
@@ -719,6 +720,7 @@ build_preview_data_dirs() {
   local -a host_dirs=()
 
   PREVIEW_XDG_DATA_DIRS=""
+  append_preview_data_dir "$PREVIEW_SYSTEM_DATA"
   append_preview_data_dir "$PREVIEW_HOST_EXPORT"
   append_preview_data_dir "$PREVIEW_FLATPAK_EXPORT"
 
@@ -870,7 +872,7 @@ prepare_preview_root() {
   python3 "$CORE/scripts/theme_hot_reload.py" --archive-recovery \
     --preview-data "$PREVIEW_DATA" --preview-state "$PREVIEW_STATE" \
     --runtime-dir "$RUNTIME_DIR" || return $?
-  preview_remove "$PREVIEW_CONFIG" "$PREVIEW_DATA" "$PREVIEW_CACHE" "$PREVIEW_STATE" "$PREVIEW_SESSION_RUNTIME" || return $?
+  preview_remove "$PREVIEW_CONFIG" "$PREVIEW_DATA" "$PREVIEW_SYSTEM_DATA" "$PREVIEW_CACHE" "$PREVIEW_STATE" "$PREVIEW_SESSION_RUNTIME" || return $?
   mkdir -p \
     "$PREVIEW_HOME" \
     "$PREVIEW_CONFIG" \
@@ -880,6 +882,7 @@ prepare_preview_root() {
     "$PREVIEW_DATA/icons" \
     "$PREVIEW_DATA/gnome-shell/extensions" \
     "$PREVIEW_DATA/backgrounds/fedora-nova" \
+    "$PREVIEW_SYSTEM_DATA/gnome-shell/extensions" \
     "$PREVIEW_CACHE" \
     "$PREVIEW_STATE" \
     "$PREVIEW_SESSION_RUNTIME" \
@@ -900,7 +903,7 @@ prepare_preview_root() {
   if [[ -d "/usr/share/gnome-shell/extensions/$DOCK_UUID" ]]; then
     python3 "$ROOT/dev-tools/prepare_preview_dock.py" \
       "/usr/share/gnome-shell/extensions/$DOCK_UUID" \
-      "$PREVIEW_DATA/gnome-shell/extensions/$DOCK_UUID" || return $?
+      "$PREVIEW_SYSTEM_DATA/gnome-shell/extensions/$DOCK_UUID" || return $?
   fi
 
   mkdir -p "$PREVIEW_DATA/gnome-shell/extensions/$FOLDER_LAYOUT_UUID"
