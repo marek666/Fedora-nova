@@ -20,7 +20,7 @@
   background-image: none !important;
   border: 0 !important;
   border-radius: 999px !important;
-  box-shadow: 0 0 0 7px nova-rgba(secondary, 0.55) !important;
+  box-shadow: 0 0 0 5px nova-rgba(secondary, 0.55) !important;
 }
 
 @mixin nova-hover-dock-halo {
@@ -32,7 +32,7 @@
   background-image: none !important;
   border: 0 !important;
   border-radius: 999px !important;
-  box-shadow: 0 0 0 5px nova-rgba(secondary, 0.55) !important;
+  box-shadow: 0 0 0 3px nova-rgba(secondary, 0.55) !important;
 }
 
 @mixin nova-hover-circle-layer {

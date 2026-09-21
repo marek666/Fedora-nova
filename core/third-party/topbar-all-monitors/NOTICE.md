@@ -7,3 +7,8 @@
 - Bundled source snapshot: upstream `main`, retrieved for Fedora Nova 0.6.0.
 
 The extension remains a separate third-party work. Fedora Nova installs and enables it as an optional multi-monitor component.
+
+Local performance mitigation: retain secondary panel instances across monitor
+geometry changes instead of reconstructing Calendar and Quick Settings each time.
+This reduces actor churn; it does not fix upstream Shell 50 Calendar signal
+cleanup when a panel actually has to be destroyed.

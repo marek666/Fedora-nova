@@ -213,6 +213,15 @@ def check_name(name: str) -> str:
     return name
 
 
+def preview_shell_argv(argv: list[str], token: str) -> bool:
+    # Keep exact matching: accepting arbitrary extra flags would weaken process
+    # identity. The launcher binds its private display name to the session token.
+    name = f"fedora-nova-preview-{token[:8]}"
+    return (bool(TOKEN_RE.fullmatch(token)) and len(argv) == 4
+            and Path(argv[0]).name == "gnome-shell"
+            and argv[1:] == ["--devkit", "--wayland", f"--wayland-display={name}"])
+
+
 def validate_tree(path: Path) -> None:
     def visit(fd):
         for name in os.listdir(fd):
@@ -419,7 +428,7 @@ class ShellIdentity:
         argv = [os.fsdecode(a) for a in Path(f"/proc/{self.pid}/cmdline").read_bytes().split(b"\0") if a]
         executable = Path(f"/proc/{self.pid}/exe").resolve(strict=True)
         expected_exe = shutil.which("gnome-shell", path=os.environ.get("PATH"))
-        if (len(argv) != 3 or Path(argv[0]).name != "gnome-shell" or argv[1:] != ["--devkit", "--wayland"]
+        if (not preview_shell_argv(argv, self.token)
                 or expected_exe is None or executable != Path(expected_exe).resolve(strict=True)):
             raise HotReloadError("recorded PID is not the expected gnome-shell --devkit --wayland")
         expected = {key: str(value) for key, value in self.roots.items()}

@@ -302,7 +302,7 @@ class Lifecycle(unittest.TestCase):
         archive = subprocess.Popen(['git', '-C', str(REPO), 'archive', 'HEAD'], stdout=subprocess.PIPE)
         subprocess.run(['tar', '-x', '-C', str(cls.snapshot)], stdin=archive.stdout, check=True)
         archive.stdout.close(); assert archive.wait() == 0
-        for name in ['preview_reload.py', 'theme_hot_reload.py', 'theme_hot_reload_core.py', 'preview_settings.py']:
+        for name in ['preview_reload.py', 'theme_hot_reload.py', 'theme_hot_reload_core.py', 'preview_settings.py', 'preview_paths.py']:
             shutil.copy2(REPO / 'core/scripts' / name, cls.snapshot / 'core/scripts' / name)
         shutil.copytree(REPO / 'core/themes-src/scss', cls.snapshot / 'core/themes-src/scss', dirs_exist_ok=True)
         shutil.copy2(REPO / 'dev-shell-preview.sh', cls.snapshot / 'dev-shell-preview.sh')

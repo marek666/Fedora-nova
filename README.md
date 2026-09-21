@@ -42,13 +42,21 @@ Run the Settings application against the host backend:
 ./dev-run.sh host
 ```
 
-Run an isolated nested GNOME Shell:
+Develop the theme in an isolated nested GNOME Shell with automatic reload:
 
 ```bash
-./dev-shell-preview.sh tech
 ./dev-shell-preview.sh --watch tech
+```
+
+Close the Mutter Development Kit window, or stop it explicitly:
+
+```bash
 ./dev-shell-preview.sh --stop
 ```
+
+The launcher builds from its own checkout and keeps per-profile settings in
+`~/.cache/fedora-nova-shell-preview`. See [Shell Preview](docs/BUILDER.md#nested-gnome-shell-preview)
+for cache boundaries and isolated test sessions.
 
 ### Blur My Shell integration
 

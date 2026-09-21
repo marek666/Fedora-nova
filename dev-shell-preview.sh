@@ -181,6 +181,17 @@ done
 
 unset BASH_ENV ENV || true
 
+preview_check_paths() {
+  python3 "$CORE/scripts/preview_paths.py" check "$PREVIEW_ROOT"
+}
+
+preview_remove() {
+  python3 "$CORE/scripts/preview_paths.py" remove "$PREVIEW_ROOT" "$@"
+}
+
+# Also applies to --stop, before reading metadata or touching a foreign path.
+preview_check_paths || exit $?
+
 # Bootstrap a token we generated ourselves. The inherited FD carries a one-shot
 # proof bound to the exec-preserved PID, so a plain environment variable is not
 # enough to skip token generation.
@@ -203,6 +214,8 @@ if [[ $STOP -ne 1 ]]; then
   NOVA_PREVIEW_WAYLAND_NAME="fedora-nova-preview-${NOVA_PREVIEW_TOKEN:0:8}"
   PREVIEW_WAYLAND_SOCKET="$PREVIEW_SESSION_RUNTIME/$NOVA_PREVIEW_WAYLAND_NAME"
   PREVIEW_WAYLAND_BRIDGE="$ORIGINAL_XDG_RUNTIME_DIR/$NOVA_PREVIEW_WAYLAND_NAME"
+  python3 "$CORE/scripts/preview_paths.py" socket "$PREVIEW_ROOT" \
+    "$PREVIEW_WAYLAND_SOCKET" "$PREVIEW_WAYLAND_BRIDGE" || exit $?
 fi
 
 is_pid() {
@@ -210,13 +223,19 @@ is_pid() {
 }
 
 pid_alive() {
-  local pid="$1"
-  is_pid "$pid" && kill -0 "$pid" 2>/dev/null
+  local pid="$1" status=""
+  is_pid "$pid" && kill -0 "$pid" 2>/dev/null || return 1
+  IFS= read -r status 2>/dev/null < "/proc/$pid/stat" || return 1
+  status="${status##*) }"
+  # kill -0 succeeds for zombies too, although they cannot run or be signalled.
+  [[ "${status%% *}" != Z && "${status%% *}" != X ]]
 }
 
 group_alive() {
   local pgid="$1"
-  is_pid "$pgid" && kill -0 -- "-$pgid" 2>/dev/null
+  is_pid "$pgid" && kill -0 -- "-$pgid" 2>/dev/null || return 1
+  ps -eo pgid=,stat= | awk -v group="$pgid" \
+    '$1 == group && $2 !~ /^[ZX]/ { alive=1 } END { exit !alive }'
 }
 
 read_pid_file() {
@@ -266,7 +285,7 @@ process_has_token() {
   pid_alive "$pid" || return 1
   [[ "$token" =~ ^[0-9a-fA-F]{32}$ ]] || return 1
   [[ -r "/proc/$pid/environ" ]] || return 1
-  tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null |
+  tr '\0' '\n' 2>/dev/null < "/proc/$pid/environ" |
     grep -Fxq -- "NOVA_PREVIEW_TOKEN=$token"
 }
 
@@ -365,6 +384,21 @@ resolve_watcher_group() {
   return 1
 }
 
+wait_for_private_pgid() {
+  local pid="$1" pgid=""
+  for _ in {1..20}; do
+    pgid="$(pid_pgid "$pid")"
+    # Before setsid runs the child still belongs to the supervisor's group.
+    if is_pid "$pgid" && [[ "$pgid" == "$pid" ]]; then
+      printf '%s\n' "$pgid"
+      return 0
+    fi
+    kill -0 "$pid" 2>/dev/null || return 1
+    sleep 0.05
+  done
+  return 1
+}
+
 current_pgid() {
   ps -o pgid= -p "$$" 2>/dev/null | tr -d ' '
 }
@@ -390,7 +424,7 @@ atomic_write_file() {
   local tmp="${path}.tmp.$$"
 
   mkdir -p "$(dirname -- "$path")"
-  rm -f "$tmp"
+  preview_remove "$tmp" || return $?
   (
     umask 077
     cat > "$tmp"
@@ -413,11 +447,11 @@ write_runtime_token() {
 }
 
 clear_session_metadata() {
-  rm -f "$SESSION_PID_FILE" "$SESSION_PGID_FILE" "$SHELL_CHILD_PID_FILE" "$SESSION_META_FILE"
+  preview_remove "$SESSION_PID_FILE" "$SESSION_PGID_FILE" "$SHELL_CHILD_PID_FILE" "$SESSION_META_FILE" || return $?
 }
 
 clear_watcher_metadata() {
-  rm -f "$WATCHER_PID_FILE" "$WATCHER_PGID_FILE"
+  preview_remove "$WATCHER_PID_FILE" "$WATCHER_PGID_FILE" || return $?
 }
 
 stop_recorded_watcher() {
@@ -532,6 +566,7 @@ stop_recorded_session() {
 }
 
 stop_external_preview() {
+  preview_check_paths || return $?
   local supervisor token watcher_rc=0 session_rc=0
   supervisor="$(read_pid_file "$SUPERVISOR_PID_FILE")"
   token="$(read_token_file)"
@@ -585,8 +620,8 @@ stop_external_preview() {
   fi
 
   cleanup_preview_wayland_bridge "$token"
-  rm -rf "$LIVE_LOCK_DIR"
-  rm -f "$SUPERVISOR_PID_FILE" "$TOKEN_FILE" "$WATCH_RESULT_FILE"
+  preview_remove "$LIVE_LOCK_DIR" || return $?
+  preview_remove "$SUPERVISOR_PID_FILE" "$TOKEN_FILE" "$WATCH_RESULT_FILE" || return $?
   echo "Shell Preview zastaveno."
 }
 
@@ -707,7 +742,7 @@ prepare_export_view() {
   local target="$2"
   local item
 
-  rm -rf "$target"
+  preview_remove "$target" || return $?
   mkdir -p "$target"
   [[ -d "$source" ]] || return 0
 
@@ -726,6 +761,7 @@ prepare_host_exports() {
 }
 
 acquire_live_lock() {
+  preview_check_paths || return $?
   mkdir -p "$PREVIEW_ROOT" "$RUNTIME_DIR"
   chmod 700 "$RUNTIME_DIR"
 
@@ -758,7 +794,7 @@ acquire_live_lock() {
     exit 2
   fi
 
-  rm -rf "$LIVE_LOCK_DIR"
+  preview_remove "$LIVE_LOCK_DIR" || return $?
   mkdir "$LIVE_LOCK_DIR"
   chmod 700 "$LIVE_LOCK_DIR"
   write_pid_file "$SUPERVISOR_PID_FILE" "$$"
@@ -773,8 +809,8 @@ release_live_lock() {
     return 0
   fi
   if [[ "$supervisor" == "$$" && -n "$token" && "$token" == "${NOVA_PREVIEW_TOKEN:-}" ]]; then
-    rm -rf "$LIVE_LOCK_DIR"
-    rm -f "$SUPERVISOR_PID_FILE" "$TOKEN_FILE"
+    preview_remove "$LIVE_LOCK_DIR" || return $?
+    preview_remove "$SUPERVISOR_PID_FILE" "$TOKEN_FILE" || return $?
     return 0
   fi
   echo "CHYBA: live lock nepatří tomuto ověřenému preview procesu; diagnostiku ponechávám." >&2
@@ -815,6 +851,11 @@ PY
 
 prepare_preview_root() {
   local restore_result=""
+  preview_check_paths || return $?
+  # Reject source links before cp -a followed by theme/config generators.
+  python3 "$CORE/scripts/preview_paths.py" sources "$PREVIEW_ROOT" \
+    "$CORE/themes" "$CORE/themes-src" "$CORE/scripts" "$CORE/config" \
+    "$CORE/assets/wallpapers" "$ROOT/dev-tools/folder-layout-preview" || return $?
 
   # Save the last clean/stale preview database before rebuilding the transient roots.
   if [[ -d "$PREVIEW_CONFIG" ]]; then
@@ -829,7 +870,7 @@ prepare_preview_root() {
   python3 "$CORE/scripts/theme_hot_reload.py" --archive-recovery \
     --preview-data "$PREVIEW_DATA" --preview-state "$PREVIEW_STATE" \
     --runtime-dir "$RUNTIME_DIR" || return $?
-  rm -rf "$PREVIEW_CONFIG" "$PREVIEW_DATA" "$PREVIEW_CACHE" "$PREVIEW_STATE" "$PREVIEW_SESSION_RUNTIME"
+  preview_remove "$PREVIEW_CONFIG" "$PREVIEW_DATA" "$PREVIEW_CACHE" "$PREVIEW_STATE" "$PREVIEW_SESSION_RUNTIME" || return $?
   mkdir -p \
     "$PREVIEW_HOME" \
     "$PREVIEW_CONFIG" \
@@ -868,6 +909,10 @@ prepare_preview_root() {
 
   cp -a "$CORE/themes/." "$PREVIEW_DATA/themes/"
   cp -a "$CORE/assets/wallpapers/." "$PREVIEW_DATA/backgrounds/fedora-nova/"
+  # Recheck the copied trees too: a source can change between preflight and cp.
+  # No generator may follow a link copied into its writable theme destination.
+  python3 "$CORE/scripts/preview_paths.py" sources "$PREVIEW_ROOT" \
+    "$PREVIEW_DATA/themes" "$PREVIEW_DATA/backgrounds/fedora-nova" || return $?
   if [[ -d "$TOPBAR_SOURCE" ]]; then
     cp -a "$TOPBAR_SOURCE" "$PREVIEW_DATA/gnome-shell/extensions/"
   fi
@@ -1314,18 +1359,13 @@ start_shell() {
   create_preview_wayland_bridge || return $?
   print_banner
 
-  rm -f "$SHELL_CHILD_PID_FILE"
+  preview_remove "$SHELL_CHILD_PID_FILE" || return $?
   # A non-login shell preserves the explicitly prepared preview environment.
   # We intentionally do not source /etc/profile or files from PREVIEW_HOME.
   setsid dbus-run-session -- env -u BASH_ENV -u ENV bash -c "$SESSION_SCRIPT" &
   SHELL_PID=$!
 
-  SHELL_PGID=""
-  for _ in {1..20}; do
-    SHELL_PGID="$(pid_pgid "$SHELL_PID")"
-    is_pid "$SHELL_PGID" && break
-    sleep 0.05
-  done
+  SHELL_PGID="$(wait_for_private_pgid "$SHELL_PID")" || SHELL_PGID=""
   if ! is_pid "$SHELL_PGID"; then
     echo "CHYBA: nepodařilo se zjistit process group Shell Preview." >&2
     kill "$SHELL_PID" 2>/dev/null || true
@@ -1423,7 +1463,7 @@ PYJSON
 }
 
 start_watcher() {
-  rm -f "$WATCH_RESULT_FILE"
+  preview_remove "$WATCH_RESULT_FILE" || return $?
   setsid python3 "$PREVIEW_RELOAD_HELPER" watch-once \
     --repo-root "$ROOT" \
     --debounce-ms "${NOVA_PREVIEW_WATCH_DEBOUNCE_MS:-250}" \
@@ -1433,13 +1473,7 @@ start_watcher() {
     --json >"$WATCH_RESULT_FILE" &
   WATCH_PID=$!
 
-  WATCH_PGID=""
-  for _ in {1..20}; do
-    WATCH_PGID="$(pid_pgid "$WATCH_PID")"
-    is_pid "$WATCH_PGID" && break
-    kill -0 "$WATCH_PID" 2>/dev/null || break
-    sleep 0.05
-  done
+  WATCH_PGID="$(wait_for_private_pgid "$WATCH_PID")" || WATCH_PGID=""
   if ! is_pid "$WATCH_PGID"; then
     wait "$WATCH_PID" 2>/dev/null || true
     WATCH_PID=""
@@ -1490,7 +1524,7 @@ cleanup() {
   fi
 
   if release_live_lock; then
-    rm -f "$WATCH_RESULT_FILE"
+    preview_remove "$WATCH_RESULT_FILE" || return $?
     return 0
   else
     lock_rc=$?
@@ -1537,6 +1571,13 @@ handle_term() {
   exit_with_cleanup 143
 }
 
+shell_exit_status() {
+  case "$1" in
+    0|130|143) return 0 ;; # Normal close or requested SIGINT/SIGTERM.
+    *) echo "CHYBA: nested Shell skončil s kódem $1." >&2; return "$1" ;;
+  esac
+}
+
 acquire_live_lock
 trap handle_exit EXIT
 trap handle_int INT
@@ -1549,7 +1590,9 @@ if [[ $WATCH -ne 1 ]]; then
     rc=$?
     exit_with_cleanup "$rc"
   fi
-  wait "$SHELL_PID" 2>/dev/null || true
+  shell_rc=0
+  wait "$SHELL_PID" 2>/dev/null || shell_rc=$?
+  shell_exit_status "$shell_rc" || exit_with_cleanup "$shell_rc"
   exit_with_cleanup 0
 fi
 
@@ -1572,6 +1615,10 @@ while true; do
     wait -n "$SHELL_PID" "$WATCH_PID" 2>/dev/null || true
 
     if ! kill -0 "$SHELL_PID" 2>/dev/null; then
+      # Both children can finish together. Collect the Shell's own status,
+      # rather than accidentally returning the watcher's wait -n status.
+      shell_rc=0
+      wait "$SHELL_PID" 2>/dev/null || shell_rc=$?
       if stop_recorded_watcher; then
         :
       else
@@ -1585,6 +1632,7 @@ while true; do
       WATCH_PGID=""
 
       if stop_shell; then
+        shell_exit_status "$shell_rc" || exit_with_cleanup "$shell_rc"
         exit_with_cleanup 0
       else
         rc=$?

@@ -172,13 +172,7 @@ the current checkout while developing.
 
 ## Nested GNOME Shell Preview
 
-GNOME Shell themes are tested natively through Mutter Development Kit:
-
-```bash
-./dev-shell-preview.sh tech
-```
-
-Live watch mode:
+Recommended theme development command (Mutter Development Kit with live watch):
 
 ```bash
 ./dev-shell-preview.sh --watch tech
@@ -203,11 +197,27 @@ the explicitly selected helper.
 The watch mode supports selective theme hot reload. Changes that cannot be
 safely applied live fall back to a full nested Shell restart.
 
+The launcher resolves the checkout from the script location, not the current
+working directory. Atomic editor saves and replacement directories are covered
+by inotify plus periodic filesystem reconciliation. `.agents`, `.codex` and
+`.pytest_cache` changes are ignored.
+
+Preview cache ancestors must not be symlinks. Managed roots must be real,
+user-owned directories that are not writable by other users. Invalid paths
+fail before startup or cleanup. Theme source symlinks are rejected before
+generators run. Cleanup stays inside the validated cache root. The intentional
+host-runtime Wayland bridge is removed only when its target matches this session.
+If a path is rejected, correct that specific path; do not remove an unknown
+symlink target. Normal stop/restart preserves settings and needs no manual purge.
+
+The complete Wayland socket path must fit within 107 bytes. Use a shorter
+absolute `XDG_CACHE_HOME` if the launcher reports this limit. Shell crashes return
+a failure status; requested SIGINT/SIGTERM shutdown is cleaned up normally.
+
 CSS/Sass changes use the User Themes extension API inside the verified preview
 Shell. GTK refresh respects the saved on/off choice. Disabling User Themes
-keeps it disabled even when CSS files change. Default circle hover uses matching
-Python (startup) and Sass (reload) styling; non-default modes use the Python
-renderer during reload too.
+keeps it disabled even when CSS files change. Startup and reload use the same
+staged Sass build and Python hover renderer, including the default circle mode.
 
 Settings persist per profile: both dconf (Mutter, dock and extension choices)
 and `config/fedora-nova` (hover, curves, GTK, icon choice and custom profiles).
@@ -226,8 +236,8 @@ To review a worktree alongside the usual preview, use a separate cache root for
 both start and stop:
 
 ```bash
-XDG_CACHE_HOME=/tmp/fedora-nova-preview-test ./dev-shell-preview.sh --watch tech
-XDG_CACHE_HOME=/tmp/fedora-nova-preview-test ./dev-shell-preview.sh --stop
+XDG_CACHE_HOME=/tmp/nova-test ./dev-shell-preview.sh --watch tech
+XDG_CACHE_HOME=/tmp/nova-test ./dev-shell-preview.sh --stop
 ```
 
 Check a CSS edit without a Shell PID change, then change a dock preference and a
