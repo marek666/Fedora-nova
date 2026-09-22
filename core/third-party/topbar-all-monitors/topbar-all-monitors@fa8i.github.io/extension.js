@@ -128,16 +128,30 @@ export default class TopBarAllMonitorsExtension extends Extension {
     }
 
     _rebuildPanels() {
-        this._destroyPanels();
-
         const primaryIndex = Main.layoutManager.primaryIndex;
+        const monitors = Main.layoutManager.monitors;
+        // A mode/geometry change does not require new Calendar/Quick Settings
+        // instances. In Shell 50 some Calendar handlers outlive destruction.
+        // Reuse by current monitor index; positions are refreshed even if
+        // Mutter reordered the monitors. Remove only obsolete secondary slots.
+        const retained = [];
+        for (const panel of this._panels) {
+            if (panel.monitorIndex === primaryIndex || !monitors[panel.monitorIndex])
+                panel.destroy();
+            else
+                retained.push(panel);
+        }
+        this._panels = retained;
 
-        for (let i = 0; i < Main.layoutManager.monitors.length; i++) {
+        for (let i = 0; i < monitors.length; i++) {
             if (i === primaryIndex)
                 continue;
 
-            const monitor = Main.layoutManager.monitors[i];
-            this._panels.push(new SecondaryPanelBox(i, monitor));
+            const existing = this._panels.find(panel => panel.monitorIndex === i);
+            if (existing)
+                existing.update(monitors[i]);
+            else
+                this._panels.push(new SecondaryPanelBox(i, monitors[i]));
         }
     }
 

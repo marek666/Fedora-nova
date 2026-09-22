@@ -124,7 +124,7 @@ class ShellPreviewPersistenceWiring(unittest.TestCase):
         guard = 'if [[ "${NOVA_PREVIEW_RESTORE_SETTINGS:-0}" != "1" ]]; then'
         self.assertIn(guard, self.script)
         start = self.script.index(guard)
-        end = self.script.index('\nfi\n\nif gsettings writable org.gnome.shell welcome-dialog-last-shown-version', start)
+        end = self.script.index('\nfi\n\n# This experimental extension', start)
         guarded = self.script[start:end]
         self.assertIn('org.gnome.desktop.interface accent-color', guarded)
         self.assertIn('org.gnome.mutter dynamic-workspaces', guarded)
@@ -148,7 +148,7 @@ class ShellPreviewPersistenceWiring(unittest.TestCase):
         self.assertIn('org.gnome.shell enabled-extensions', guarded)
         after = self.script[end:]
         self.assertNotIn(bms_panel_blur, after)
-        self.assertNotIn('org.gnome.shell enabled-extensions', after)
+        self.assertNotIn('enabled-extensions "$NOVA_PREVIEW_EXTENSIONS"', after)
         self.assertIn('org.gnome.shell.extensions.user-theme name', after)
 
     def test_dbus_activated_apps_use_host_runtime_and_preview_wayland_bridge(self):
@@ -378,5 +378,5 @@ class RealDconfPersistence(unittest.TestCase):
                              'gsettings get org.gnome.shell.extensions.dash-to-dock dock-position\n'
                              'gsettings get org.gnome.shell.extensions.dash-to-dock dash-max-icon-size\n'
                              'gsettings get org.gnome.shell enabled-extensions')
-            self.assertEqual(result.splitlines(), ['false', "'LEFT'", '64', '@as []'])
+            self.assertEqual(result.splitlines(), ['false', "'LEFT'", '64', "['folder-layout-preview@fedora-nova']"])
             self.assertEqual((nova / 'current-hover').read_text(), 'none')

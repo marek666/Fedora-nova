@@ -19,6 +19,20 @@ docs/       design, Builder workflow, roadmap and development notes
 
 Development entry points remain in the repository root and use the current checkout directly.
 
+## Safe host install, upgrade, and rollback
+
+Installer V2 performs a manifest-driven user-local reinstall with a backup
+before every managed-file change. Always inspect the read-only plan first:
+
+```bash
+./install.sh --dry-run
+```
+
+After reviewing it, use `./install.sh --install`. Validation and rollback are
+available through `--validate` and `--rollback BACKUP`. Do not run the installer
+with `sudo`. See [Installer V2](docs/INSTALLER-V2.md) for the ownership model,
+legacy footprint, preserved settings, backups, and uninstall workflow.
+
 ## Development
 
 See [development integration and next steps](docs/DEVELOPMENT-PLAN.md) for the
@@ -42,13 +56,21 @@ Run the Settings application against the host backend:
 ./dev-run.sh host
 ```
 
-Run an isolated nested GNOME Shell:
+Develop the theme in an isolated nested GNOME Shell with automatic reload:
 
 ```bash
-./dev-shell-preview.sh tech
 ./dev-shell-preview.sh --watch tech
+```
+
+Close the Mutter Development Kit window, or stop it explicitly:
+
+```bash
 ./dev-shell-preview.sh --stop
 ```
+
+The launcher builds from its own checkout and keeps per-profile settings in
+`~/.cache/fedora-nova-shell-preview`. See [Shell Preview](docs/BUILDER.md#nested-gnome-shell-preview)
+for cache boundaries and isolated test sessions.
 
 ### Blur My Shell integration
 

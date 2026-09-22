@@ -62,3 +62,43 @@ class PreviewDockTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             dock.prepare(self.source, self.target)
         self.assertEqual(sentinel.read_text(), "user data")
+
+
+class PreviewDockWiringTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.script = (REPO / "dev-shell-preview.sh").read_text(encoding="utf-8")
+
+    def test_dock_is_staged_as_preview_system_extension(self):
+        self.assertIn('PREVIEW_SYSTEM_DATA="$PREVIEW_ROOT/system-data"', self.script)
+        self.assertIn(
+            '"$PREVIEW_SYSTEM_DATA/gnome-shell/extensions/$DOCK_UUID"',
+            self.script,
+        )
+        self.assertNotIn(
+            '"$PREVIEW_DATA/gnome-shell/extensions/$DOCK_UUID"',
+            self.script,
+        )
+
+    def test_preview_system_data_precedes_host_data_dirs(self):
+        start = self.script.index("build_preview_data_dirs() {")
+        end = self.script.index("\n}\n\nprepare_export_view()", start)
+        function = self.script[start:end]
+        system = 'append_preview_data_dir "$PREVIEW_SYSTEM_DATA"'
+        host = 'append_preview_data_dir "$PREVIEW_HOST_EXPORT"'
+        self.assertIn(system, function)
+        self.assertLess(function.index(system), function.index(host))
+
+    def test_system_extension_root_is_rebuilt_with_transient_preview_data(self):
+        start = self.script.index("prepare_preview_root() {")
+        end = self.script.index("\n}\n\nexport_preview_env()", start)
+        function = self.script[start:end]
+        self.assertIn(
+            'preview_remove "$PREVIEW_CONFIG" "$PREVIEW_DATA" '
+            '"$PREVIEW_SYSTEM_DATA"',
+            function,
+        )
+        self.assertIn(
+            '"$PREVIEW_SYSTEM_DATA/gnome-shell/extensions"',
+            function,
+        )

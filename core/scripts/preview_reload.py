@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 from typing import Iterable
+from theme_hot_reload_core import Cancelled
 
 IGNORE = "IGNORE"
 THEME_RELOAD = "THEME_RELOAD"
@@ -34,6 +35,9 @@ RANK = {
 }
 
 IGNORE_GLOBS = (
+    ".agents", ".agents/**",
+    ".codex", ".codex/**",
+    ".pytest_cache", ".pytest_cache/**",
     "__pycache__",
     "**/__pycache__",
     "__pycache__/**",
@@ -63,7 +67,7 @@ IGNORE_GLOBS = (
 )
 
 INOTIFY_EXCLUDE_REGEX = (
-    r"(^|/)(\.git|\.dev-build|__pycache__|_build|builddir|\.flatpak-build-test)(/|$)"
+    r"(^|/)(\.git|\.agents|\.codex|\.pytest_cache|\.dev-build|__pycache__|_build|builddir|\.flatpak-build-test)(/|$)"
 )
 
 THEME_GLOBS = (
@@ -499,7 +503,7 @@ class Collector:
             for key, _mask in self.selector.select(timeout):
                 chunk = os.read(key.fileobj.fileno(), 65536)
                 if not chunk:
-                    raise RuntimeError("inotify collector closed unexpectedly")
+                    self.collector_failed("inotify collector closed unexpectedly")
                 if key.data == "errors":
                     self.errors += chunk
                     if len(self.errors) > 65536:
@@ -521,11 +525,28 @@ class Collector:
                     except ValueError:
                         continue
                     self.add({relative})
+            if time.monotonic() >= self.next_scan:
+                self.reconcile()
             if self.process.poll() is not None:
-                raise RuntimeError(f"inotify exited: {self.errors.decode(errors='replace').strip()}")
+                self.collector_failed(f"inotify exited: {self.errors.decode(errors='replace').strip()}")
             if not self.ready and time.monotonic() - self.started > 10:
                 raise RuntimeError("inotify registration timed out")
         _ensure_supervisor(self.supervisor_pid, self.token)
+
+    def collector_failed(self, message):
+        if self.supervisor_pid is not None:
+            import theme_hot_reload as hot
+            # Group SIGTERM can close inotify's pipe before Python handles its
+            # own signal. Give that delivery a bounded chance, then still report
+            # genuinely unexpected collector death as an error.
+            until = time.monotonic() + .05
+            while True:
+                hot.checkpoint()
+                _ensure_supervisor(self.supervisor_pid, self.token)
+                if time.monotonic() >= until:
+                    break
+                time.sleep(.005)
+        raise RuntimeError(message)
 
     def next_batch(self):
         while True:
@@ -758,7 +779,7 @@ def _cmd_watch_once(args: argparse.Namespace) -> int:
                         print(f"Incremental preview refresh rejected; requesting full restart: {exc}", file=sys.stderr)
                         action = FULL_SHELL_RESTART
                         break
-    except SupervisorGone:
+    except (SupervisorGone, Cancelled):
         return 0
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
         print(f"preview_reload.py: watch-once: {exc}", file=sys.stderr)

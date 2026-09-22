@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse, configparser, hashlib, json, os, re, shutil, subprocess, sys
+import argparse, configparser, hashlib, json, os, re, shutil, stat, subprocess, sys, tempfile
 from pathlib import Path
 try:
     from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageOps
@@ -9,6 +9,7 @@ except ImportError as exc:
 SIZES=(64,128,256,512)
 STEAM_EXEC_RE=re.compile(r'(steam://(?:run|rungameid)/|\bsteam\b.*(?:-applaunch|rungameid))',re.I)
 SAFE_NAME_RE=re.compile(r'^[A-Za-z0-9_.+-]+$')
+BACKUP_NAME_RE=re.compile(r'^[0-9a-f]{64}\.desktop$')
 def data_home(): return Path(os.environ.get('XDG_DATA_HOME',Path.home()/'.local/share'))
 def state_home(): return Path(os.environ.get('XDG_STATE_HOME',Path.home()/'.local/state'))
 def parse_desktop(path):
@@ -58,22 +59,63 @@ def write_index(root,base):
     dirs=','.join(f'{s}x{s}/apps' for s in SIZES); lines=['[Icon Theme]','Name=Fedora Nova Game Icons','Comment=Ringless circular game icon overlay',f'Inherits={base},hicolor',f'Directories={dirs}','']
     for s in SIZES: lines += [f'[{s}x{s}/apps]',f'Size={s}','Context=Applications','Type=Fixed','']
     (root/'index.theme').write_text('\n'.join(lines),encoding='utf-8')
+def sha256(path):
+    digest=hashlib.sha256()
+    with path.open('rb') as handle:
+        for chunk in iter(lambda:handle.read(1024*1024),b''): digest.update(chunk)
+    return digest.hexdigest()
+def safe_regular(path,root,label):
+    path=path.absolute(); root=root.absolute()
+    if not root.is_absolute() or root.is_symlink(): raise ValueError(f'Unsafe {label} root: {root}')
+    try: relative=path.relative_to(root)
+    except ValueError as exc: raise ValueError(f'{label} escapes its root: {path}') from exc
+    current=root
+    for part in relative.parts[:-1]:
+        current=current/part
+        if current.is_symlink() or not current.is_dir(): raise ValueError(f'Unsafe {label} parent: {current}')
+    if path.is_symlink() or not path.is_file(): raise ValueError(f'Unsafe {label} file: {path}')
+    info=path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid() or info.st_nlink!=1:
+        raise ValueError(f'Unsafe {label} ownership/type: {path}')
+    return path
+def atomic_copy(source,target):
+    fd,name=tempfile.mkstemp(prefix=f'.{target.name}.nova-',dir=target.parent)
+    os.close(fd); temporary=Path(name)
+    try:
+        shutil.copy2(source,temporary,follow_symlinks=False)
+        os.replace(temporary,target)
+    finally: temporary.unlink(missing_ok=True)
 def restore(state):
     mf=state/'desktop-overrides.json'
-    if not mf.is_file(): return 0
-    try: records=json.loads(mf.read_text(encoding='utf-8'))
-    except Exception: return 0
-    n=0
+    if not mf.exists() and not mf.is_symlink(): return 0
+    if not mf.is_file() or mf.is_symlink(): raise ValueError(f'Unsafe Steam override manifest: {mf}')
+    records=json.loads(mf.read_text(encoding='utf-8'))
+    if not isinstance(records,list): raise ValueError('Steam override manifest must contain a list')
+    apps=data_home()/'applications'; backups=state/'desktop-backups'; validated=[]
     for r in records:
-        target=Path(r['target']); backup=Path(r['backup'])
-        if backup.is_file(): target.parent.mkdir(parents=True,exist_ok=True); shutil.copy2(backup,target); n+=1
-    mf.unlink(missing_ok=True); return n
+        if not isinstance(r,dict) or not all(isinstance(r.get(k),str) for k in ('target','backup','patched_sha256')):
+            raise ValueError('Malformed Steam override record')
+        target=safe_regular(Path(r['target']),apps,'Steam desktop target')
+        backup=safe_regular(Path(r['backup']),backups,'Steam desktop backup')
+        if target.suffix!='.desktop' or not BACKUP_NAME_RE.fullmatch(backup.name):
+            raise ValueError('Unexpected Steam override filename')
+        if sha256(target)!=r['patched_sha256']:
+            raise ValueError(f'Steam desktop changed since it was patched; refusing overwrite: {target}')
+        validated.append((target,backup))
+    for target,backup in validated: atomic_copy(backup,target)
+    mf.unlink(); return len(validated)
 def patch(path,cp,name,state,records):
+    apps=data_home()/'applications'; path=safe_regular(path,apps,'Steam desktop target')
     bd=state/'desktop-backups'; bd.mkdir(parents=True,exist_ok=True); backup=bd/(hashlib.sha256(str(path).encode()).hexdigest()+'.desktop')
-    if not backup.exists(): shutil.copy2(path,backup)
+    if backup.exists() or backup.is_symlink(): safe_regular(backup,bd,'Steam desktop backup')
+    else: shutil.copy2(path,backup,follow_symlinks=False)
     cp['Desktop Entry']['Icon']=name
-    with path.open('w',encoding='utf-8') as f: cp.write(f,space_around_delimiters=False)
-    records.append({'target':str(path),'backup':str(backup)})
+    fd,tmp=tempfile.mkstemp(prefix=f'.{path.name}.nova-',dir=path.parent,text=True); os.close(fd); temporary=Path(tmp)
+    try:
+        with temporary.open('w',encoding='utf-8') as f: cp.write(f,space_around_delimiters=False)
+        os.chmod(temporary,stat.S_IMODE(path.lstat().st_mode)); os.replace(temporary,path)
+    finally: temporary.unlink(missing_ok=True)
+    records.append({'target':str(path),'backup':str(backup),'patched_sha256':sha256(path)})
 def generate(base,background):
     apps=data_home()/'applications'; theme=data_home()/'icons/Fedora-Nova-Steam'; state=state_home()/'fedora-nova/steam-icons'; state.mkdir(parents=True,exist_ok=True)
     restore(state); shutil.rmtree(theme,ignore_errors=True); theme.mkdir(parents=True); write_index(theme,base)
@@ -96,6 +138,9 @@ def generate(base,background):
     return generated,skipped,messages
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('base'); ap.add_argument('accent'); ap.add_argument('background'); ap.add_argument('--restore-desktops',action='store_true'); a=ap.parse_args(); state=state_home()/'fedora-nova/steam-icons'
-    if a.restore_desktops: print(f'RESTORED desktops={restore(state)}'); return 0
-    g,s,m=generate(a.base,a.background); [print(x) for x in m]; print(f'RESULT generated={g} skipped={s}'); return 0 if g else 4
+    try:
+        if a.restore_desktops: print(f'RESTORED desktops={restore(state)}'); return 0
+        g,s,m=generate(a.base,a.background); [print(x) for x in m]; print(f'RESULT generated={g} skipped={s}'); return 0 if g else 4
+    except (OSError,ValueError,KeyError,TypeError,json.JSONDecodeError) as exc:
+        print(f'ERROR: {exc}',file=sys.stderr); return 2
 if __name__=='__main__': raise SystemExit(main())

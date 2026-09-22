@@ -285,7 +285,7 @@ def circle_body(
   background-image: none !important;
   border: 0 !important;
   border-radius: 999px !important;
-  box-shadow: 0 0 0 5px rgba({sr}, {sg}, {sb}, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba({sr}, {sg}, {sb}, 0.55) !important;
 }}
 
 /* App grid: large external halo, especially visible around visually small
@@ -298,7 +298,7 @@ def circle_body(
   background-image: none !important;
   border: 0 !important;
   border-radius: 999px !important;
-  box-shadow: 0 0 0 7px rgba({sr}, {sg}, {sb}, 0.55) !important;
+  box-shadow: 0 0 0 5px rgba({sr}, {sg}, {sb}, 0.55) !important;
 }}
 
 .app-well-app .overview-icon,
