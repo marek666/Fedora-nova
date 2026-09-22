@@ -68,8 +68,7 @@ rm -f \
   "$NOVA_DATA_HOME/org.gnome.Ptyxis/palettes/Fedora Nova Midnight.palette" \
   "$NOVA_DATA_HOME/org.gnome.Ptyxis/palettes/Fedora Nova Glass Lite.palette" \
   "$NOVA_DATA_HOME/org.gnome.Ptyxis/palettes/Fedora Nova Pulse.palette" \
-  "$NOVA_CONFIG_HOME/fastfetch/fedora-nova.jsonc" \
-  "$NOVA_DATA_HOME/icons/hicolor/scalable/apps/fedora-nova.svg"
+  "$NOVA_CONFIG_HOME/fastfetch/fedora-nova.jsonc"
 
 LEGACY_PALETTE="$NOVA_PTYXIS_DIR/Fedora Nova.palette"
 if [[ -e "$LEGACY_PALETTE" || -L "$LEGACY_PALETTE" ]]; then

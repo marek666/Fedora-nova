@@ -78,7 +78,10 @@ class InstallerV2Tests(unittest.TestCase):
         for theme in THEMES:
             self.put(core / f"themes/{theme}/gnome-shell/gnome-shell.css", f"{theme}\n")
         self.put(core / "assets/wallpapers/nova.svg", "wallpaper\n")
-        self.put(core / "assets/icons/fedora-nova.svg", "app icon\n")
+        self.put(
+            self.source / "assets/icons/io.github.fedoranova.FedoraNova.svg",
+            "app icon\n",
+        )
         self.put(core / "assets/icons/user-trash.svg", "trash empty\n")
         self.put(core / "assets/icons/user-trash-full.svg", "trash full\n")
         for palette in PTYXIS_PALETTES:
@@ -125,7 +128,6 @@ class InstallerV2Tests(unittest.TestCase):
             self.put(self.source / f"app/data/{app_id}.desktop.in", "[Desktop Entry]\nType=Application\n")
             self.put(self.source / f"app/data/{app_id}.metainfo.xml", "<component/>\n")
             self.put(self.source / f"app/data/{app_id}.gschema.xml", "<schemalist/>\n")
-            self.put(self.source / f"app/data/{app_id}.svg", "icon\n")
 
     def _make_fake_commands(self) -> None:
         self.put(
@@ -174,6 +176,12 @@ class InstallerV2Tests(unittest.TestCase):
         self.assertTrue((self.data / "fedora-nova/core/nova").is_file())
         self.assertTrue((self.data / f"gnome-shell/extensions/topbar-all-monitors@fa8i.github.io/extension.js").is_file())
         self.assertTrue((self.data / "themes/Fedora-Nova-Tech/gnome-shell/gnome-shell.css").is_file())
+        app_icon = self.data / "icons/hicolor/scalable/apps/io.github.fedoranova.FedoraNova.svg"
+        self.assertEqual(app_icon.read_text(), "app icon\n")
+        self.assertFalse(
+            (self.data / "icons/hicolor/scalable/apps/io.github.fedoranova.FedoraNova.Devel.svg").exists()
+        )
+        self.assertFalse((self.data / "icons/hicolor/scalable/apps/fedora-nova.svg").exists())
         newline_link = self.data / "icons/Tela-circle/scalable/places/newline-link.svg"
         self.assertTrue(newline_link.is_symlink())
         self.assertEqual(os.readlink(newline_link), "original.svg")
@@ -379,6 +387,37 @@ class InstallerV2Tests(unittest.TestCase):
         self.assertFalse(stale.exists())
         metadata = json.loads((backup / "backup.json").read_text())
         self.assertIn(str(stale), {entry["path"] for entry in metadata["entries"]})
+
+    def test_stale_manifest_application_icons_are_safely_removed(self) -> None:
+        self.installer().install()
+        icon_root = self.data / "icons/hicolor/scalable/apps"
+        stale_icons = [
+            self.put(icon_root / "fedora-nova.svg", "old legacy icon\n"),
+            self.put(
+                icon_root / "io.github.fedoranova.FedoraNova.Devel.svg",
+                "old devel icon\n",
+            ),
+        ]
+        manifest = json.loads(self.context.manifest_path.read_text())
+        for icon in stale_icons:
+            manifest["managed_targets"].append(
+                {
+                    "path": str(icon),
+                    "component": "old-app-icon",
+                    "type": "file",
+                    "fingerprint": tree_fingerprint(icon),
+                    "entries": [],
+                }
+            )
+        self.context.manifest_path.write_text(json.dumps(manifest))
+
+        self.installer().install()
+
+        for icon in stale_icons:
+            self.assertFalse(icon.exists())
+        self.assertTrue(
+            (icon_root / "io.github.fedoranova.FedoraNova.svg").is_file()
+        )
 
     def test_unregistered_manifest_target_is_never_removed(self) -> None:
         self.installer().install()

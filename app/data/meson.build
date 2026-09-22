@@ -21,14 +21,8 @@ install_data(
 )
 
 install_data(
-  'io.github.fedoranova.FedoraNova.Devel.svg',
-  install_dir: join_paths(
-    get_option('datadir'),
-    'icons',
-    'hicolor',
-    'scalable',
-    'apps',
-  ),
+  nova_icon,
+  install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps',
 )
 
 if get_option('production_app')
@@ -51,10 +45,5 @@ if get_option('production_app')
   install_data(
     'io.github.fedoranova.FedoraNova.gschema.xml',
     install_dir: join_paths(get_option('datadir'), 'glib-2.0', 'schemas'),
-  )
-
-  install_data(
-    'io.github.fedoranova.FedoraNova.svg',
-    install_dir: join_paths(get_option('datadir'), 'icons', 'hicolor', 'scalable', 'apps'),
   )
 endif

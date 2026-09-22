@@ -12,6 +12,7 @@ from gi.repository import Adw, Gdk, Gio, Gtk  # noqa: E402
 
 from .constants import (
     APP_ID,
+    APP_ICON_ID,
     APP_NAME,
     ISSUE_URL,
     PROJECT_URL,
@@ -94,7 +95,7 @@ class NovaApplication(Adw.Application):
         about = Adw.AboutWindow(
             transient_for=self.window,
             application_name=APP_NAME,
-            application_icon=APP_ID,
+            application_icon=APP_ICON_ID,
             developer_name="Fedora Nova contributors",
             version=VERSION,
             license_type=Gtk.License.GPL_3_0,

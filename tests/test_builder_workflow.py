@@ -244,8 +244,8 @@ def main():
                 desktop = configparser.ConfigParser(interpolation=None)
                 desktop.read(REPO / "app/data" / (identity + ".desktop.in"))
                 self.assertEqual(desktop["Desktop Entry"]["Exec"], command)
-                self.assertEqual(desktop["Desktop Entry"]["Icon"], identity)
-                ET.parse(REPO / "app/data" / (identity + ".svg"))
+                self.assertEqual(desktop["Desktop Entry"]["Icon"], PRODUCTION_ID)
+        ET.parse(REPO / "assets/icons" / (PRODUCTION_ID + ".svg"))
         manifest = json.loads((REPO / (DEVEL_ID + ".json")).read_text())
         self.assertEqual(manifest["app-id"], DEVEL_ID)
         self.assertEqual(manifest["command"], "fedora-nova-settings-devel")
@@ -278,13 +278,16 @@ def main():
                         for relative in [
                             "bin/" + launcher,
                             "share/applications/" + identity + ".desktop",
-                            "share/icons/hicolor/scalable/apps/" + identity + ".svg",
                             "share/glib-2.0/schemas/" + identity + ".gschema.xml",
                         ]:
                             path = stage / "app" / relative
                             self.assertEqual(path.is_file(), expected, str(path))
                         if expected:
                             self.assertTrue(os.access(stage / "app/bin" / launcher, os.X_OK))
+                    icon_root = stage / "app/share/icons/hicolor/scalable/apps"
+                    self.assertTrue((icon_root / (PRODUCTION_ID + ".svg")).is_file())
+                    self.assertFalse((icon_root / (DEVEL_ID + ".svg")).exists())
+                    self.assertFalse((stage / "app/share/fedora-nova/assets").exists())
 
 
 # Executed in place of the launcher's final python3 invocation. It imports the

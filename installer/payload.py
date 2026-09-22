@@ -311,12 +311,16 @@ def artifacts(context: InstallContext) -> list[Artifact]:
                 Artifact("desktop", f"applications/{app_id}.desktop", data / f"applications/{app_id}.desktop"),
                 Artifact("metainfo", f"metainfo/{app_id}.metainfo.xml", data / f"metainfo/{app_id}.metainfo.xml"),
                 Artifact("schema", f"schemas/{app_id}.gschema.xml", data / f"glib-2.0/schemas/{app_id}.gschema.xml"),
-                Artifact("app-icon", f"app-icons/{app_id}.svg", data / f"icons/hicolor/scalable/apps/{app_id}.svg"),
             ]
         )
     result.append(
-        Artifact("legacy-app-icon", "app-icons/fedora-nova.svg", data / "icons/hicolor/scalable/apps/fedora-nova.svg")
+        Artifact(
+            "app-icon",
+            "app-icons/io.github.fedoranova.FedoraNova.svg",
+            data / "icons/hicolor/scalable/apps/io.github.fedoranova.FedoraNova.svg",
+        )
     )
+
     result.extend(
         Artifact("shell-theme", f"themes/{theme}", data / f"themes/{theme}")
         for theme in THEMES
@@ -399,13 +403,18 @@ def build_payload(context: InstallContext, destination: Path) -> list[Artifact]:
             app_data / f"{app_id}.desktop.in": destination / f"applications/{app_id}.desktop",
             app_data / f"{app_id}.metainfo.xml": destination / f"metainfo/{app_id}.metainfo.xml",
             app_data / f"{app_id}.gschema.xml": destination / f"schemas/{app_id}.gschema.xml",
-            app_data / f"{app_id}.svg": destination / f"app-icons/{app_id}.svg",
         }
         for origin, target in mapping.items():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(_ensure_source(origin), target)
-    (destination / "app-icons").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(_ensure_source(core / "assets/icons/fedora-nova.svg"), destination / "app-icons/fedora-nova.svg")
+
+    app_icon_dir = destination / "app-icons"
+    app_icon_dir.mkdir(parents=True, exist_ok=True)
+
+    shutil.copy2(
+        _ensure_source(source / "assets/icons/io.github.fedoranova.FedoraNova.svg"),
+        app_icon_dir / "io.github.fedoranova.FedoraNova.svg",
+    )
 
     for theme in THEMES:
         target = destination / f"themes/{theme}"

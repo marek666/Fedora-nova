@@ -5,6 +5,7 @@ from pathlib import Path
 
 DEVEL_APP_ID = "io.github.fedoranova.FedoraNova.Devel"
 PRODUCTION_APP_ID = "io.github.fedoranova.FedoraNova"
+APP_ICON_ID = PRODUCTION_APP_ID
 # Identity never grants host access, and Flatpak always keeps the Devel schema.
 APP_ID = (
     PRODUCTION_APP_ID

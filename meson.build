@@ -19,6 +19,10 @@ datadir = get_option('datadir')
 pkgdatadir = join_paths(prefix, datadir, 'fedora-nova')
 app_id = 'io.github.fedoranova.FedoraNova.Devel'
 
+nova_icon = files(
+  'assets/icons/io.github.fedoranova.FedoraNova.svg'
+)
+
 subdir('app')
 
 install_subdir(

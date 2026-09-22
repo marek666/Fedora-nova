@@ -399,6 +399,8 @@ class Installer:
             data / "themes/Fedora-Nova",
             home / ".themes/Fedora-Nova",
             data / "applications/fedora-nova-control.desktop",
+            data / "icons/hicolor/scalable/apps/fedora-nova.svg",
+            data / "icons/hicolor/scalable/apps/io.github.fedoranova.FedoraNova.Devel.svg",
             data / "org.gnome.Ptyxis/palettes/Fedora Nova.palette",
             context.config_home / "fedora-nova/colors.json",
             context.config_home / "fedora-nova/profiles.json",

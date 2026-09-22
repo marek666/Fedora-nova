@@ -61,7 +61,7 @@ class AssetInstallBoundaries(unittest.TestCase):
         self.put(core / "scripts/apply-settings.sh", '#!/bin/sh\nexit 0\n', executable=True)
         for theme in THEMES:
             self.put(core / "themes" / theme / "gnome-shell/gnome-shell.css", label + "\n")
-        for name in ["assets/wallpapers/wall.svg", "assets/icons/fedora-nova.svg",
+        for name in ["assets/wallpapers/wall.svg",
                      "assets/icons/user-trash.svg", "assets/icons/user-trash-full.svg",
                      "terminal/ptyxis/Fedora Nova Tech.palette",
                      "terminal/fastfetch/fedora-nova.jsonc",
@@ -98,7 +98,6 @@ class AssetInstallBoundaries(unittest.TestCase):
         for path in [self.data / "backgrounds/fedora-nova/wall.svg",
                      self.data / "org.gnome.Ptyxis/palettes/Fedora Nova Tech.palette",
                      self.config / "fastfetch/fedora-nova.jsonc",
-                     self.data / "icons/hicolor/scalable/apps/fedora-nova.svg",
                      self.data / f"gnome-shell/extensions/{UUID}/extension.js"]:
             self.assertEqual(path.read_text(), label + "\n")
 
@@ -110,8 +109,22 @@ class AssetInstallBoundaries(unittest.TestCase):
         self.run_script("scripts/install-user-assets.sh")
         self.assert_assets()
         self.assert_no_bundled_config_shadow()
+        self.assertFalse(
+            (self.data / "icons/hicolor/scalable/apps/io.github.fedoranova.FedoraNova.svg").exists()
+        )
+        self.assertFalse(
+            (self.data / "icons/hicolor/scalable/apps/fedora-nova.svg").exists()
+        )
         self.assertFalse(self.wrapper.exists())
         self.assertFalse(self.desktop.exists())
+
+    def test_user_assets_preserve_package_owned_application_icon(self):
+        icon = self.put(
+            self.data / "icons/hicolor/scalable/apps/io.github.fedoranova.FedoraNova.svg",
+            "package-owned icon\n",
+        )
+        self.run_script("scripts/install-user-assets.sh")
+        self.assertEqual(icon.read_text(), "package-owned icon\n")
 
     def test_existing_legacy_config_copies_are_preserved_not_refreshed(self):
         legacy = self.config / "fedora-nova"
