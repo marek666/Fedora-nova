@@ -66,6 +66,15 @@ class ForgeProfileTests(unittest.TestCase):
         self.assertEqual(TEMPLATE.read_bytes(), before)
         return result.stdout.strip()
 
+    def delete(self, profile_id: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(FORGE), "delete", profile_id],
+            cwd=REPO,
+            env=self.env,
+            capture_output=True,
+            text=True,
+        )
+
     def test_generated_theme_uses_current_tech_profile_as_template_palette(self) -> None:
         profile_id = self.create()
         self.assertEqual(profile_id, "custom-token-audit")
@@ -128,6 +137,42 @@ class ForgeProfileTests(unittest.TestCase):
         self.assertTrue(palette.is_file())
         self.assertIn(metadata["accent"], wallpaper.read_text(encoding="utf-8"))
         self.assertIn(f'Cursor={metadata["accent"]}', palette.read_text(encoding="utf-8"))
+
+    def test_existing_profile_is_never_overwritten(self) -> None:
+        profile_id = self.create(name="Do Not Replace")
+        metadata_path = self.config / "fedora-nova/custom-profiles" / f"{profile_id}.json"
+        before = metadata_path.read_bytes()
+        result = subprocess.run(
+            [sys.executable, str(FORGE), "create", "Do Not Replace", "#000000"],
+            cwd=REPO,
+            env=self.env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("odmítám přepsat", result.stderr)
+        self.assertEqual(metadata_path.read_bytes(), before)
+
+    def test_delete_rejects_metadata_path_escape_without_touching_outside(self) -> None:
+        profile_id = self.create(name="Deletion Boundary")
+        metadata_path = self.config / "fedora-nova/custom-profiles" / f"{profile_id}.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        outside = self.root / "outside important"
+        outside.mkdir()
+        sentinel = outside / "sentinel"
+        sentinel.write_text("keep\n", encoding="utf-8")
+        metadata["theme"] = str(outside)
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+        result = self.delete(profile_id)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("neplatný theme cíl", result.stderr)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep\n")
+        self.assertTrue(metadata_path.is_file())
+
+    def test_delete_rejects_traversal_profile_id(self) -> None:
+        result = self.delete("custom-x/../../outside")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("platné Forge profily", result.stderr)
 
 
 if __name__ == "__main__":

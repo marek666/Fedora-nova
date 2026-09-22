@@ -13,7 +13,8 @@ Start with the read-only plan:
 The output is grouped into `BACKUP`, `REMOVE`, `REPLACE`, `INSTALL`,
 `SETTINGS`, `UNCHANGED`, and `WARNINGS`. Dry-run does not create a log, staging
 directory, backup, or state file and does not invoke `dconf` or desktop cache
-tools.
+tools. The launcher also disables Python bytecode generation, so inspection
+does not write `__pycache__` into the checkout.
 
 After reviewing that plan, a real user-local install is explicit:
 
@@ -40,16 +41,23 @@ DISCOVER
   -> VALIDATE
 ```
 
-The payload is built only from reviewed runtime sources. Source Sass,
+The payload is built only from reviewed runtime sources. In a Git checkout,
+untracked files below `core/` are excluded as well. Source Sass,
 development Preview helpers, bytecode, the legacy core installer/uninstaller,
 and package lists are excluded. Each managed top-level target is copied to a
 temporary sibling and atomically renamed into place. Shared directories such as
 `applications`, `themes`, `icons`, `glib-2.0/schemas`, and
 `gnome-shell/extensions` are never recursively replaced.
+Relocated links are validated both against the whole staging tree and against
+the independently installed component boundary.
 
 If installation fails after the backup, the installer prints the exact backup
 and rollback command. It does not automatically roll back a partly installed
 host.
+
+Install, rollback, and uninstall take one non-blocking per-user transaction
+lock. A second mutating operation fails before changing managed host content;
+its ownership plan is recomputed after the lock is held.
 
 ## State, logs, and backups
 
@@ -81,8 +89,12 @@ Rollback is explicit:
 ```
 
 Before rollback modifies anything, it creates another backup of the current
-state. Rollback accepts only a direct, non-symlink child of the configured V2
-backup root and restores only paths listed in its metadata.
+state. Rollback accepts only an owner-controlled, direct, non-symlink child of
+the configured V2 backup root, rejects linked internal object/settings
+directories, and restores only registered transaction paths listed in its
+metadata. Preserved settings and dconf are not automatically replayed: V2 does
+not modify them, so replaying an older snapshot could overwrite newer user
+choices. Their verified backup copies remain available for explicit recovery.
 
 ## Validation
 
@@ -148,9 +160,9 @@ become stale manifest targets and are backed up before removal.
 - targeted dconf trees for interface, window manager, background, screensaver,
   Shell, User Themes, Dash to Dock, and Blur My Shell.
 
-Installer V2 does not blindly load those dumps after a successful install,
-because the install itself does not reset them. They remain unchanged and the
-dumps are available for rollback. Unknown values are reported rather than
+Installer V2 does not load those dumps during install or rollback, because the
+transaction itself does not reset them. They remain unchanged and the dumps
+are retained for explicit recovery. Unknown values are reported rather than
 silently replaced.
 
 ### Third-party files
@@ -159,7 +171,10 @@ Dash to Dock and Blur My Shell extension source directories are third-party and
 are never deleted or patched by the host installer. Other themes, icons,
 extensions, applications and files alongside Fedora Nova targets are untouched.
 An unrecognized file at an old single-file Fedora Nova path is reported and
-preserved.
+preserved. Product-prefixed wildcard leftovers that are not proven by a V2
+manifest are also reported rather than deleted; this avoids claiming a
+user-created `Fedora-Nova-*` theme, `fedora-nova-*` wallpaper, or similarly
+named palette merely from its filename.
 
 ## Current and legacy footprint audit
 
@@ -204,7 +219,9 @@ All write/remove targets must be absolute descendants of an explicit canonical
 HOME/XDG/prefix root. `/`, HOME itself, an XDG root itself, empty paths, Preview
 paths, and targets with a symlinked parent are rejected. Leaf symlinks are
 backed up as links and unlinked without following them. Recursive copy and
-removal never follow symlinks.
+removal never follow symlinks. Existing objects selected for backup, replacement,
+or removal must be owned throughout by the invoking user; unexpected ownership
+or unsafe writable installer-state directories stop the transaction.
 
 The bundled Tela archive is validated against absolute paths, `..`, special
 files and escaping links before extraction. Its historical `CherryStudio.svg`

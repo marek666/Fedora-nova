@@ -45,8 +45,10 @@ case "$ACTION" in
     ;;
   restore)
     BASE="$(cat "$STATE_ROOT/base-theme" 2>/dev/null || echo Tela-circle-dark)"
+    if ! python3 "$SCRIPT_DIR/steam-icons.py" "$BASE" '#2ED8E8' '#120C25' --restore-desktops; then
+      die "Původní Steam launchery nelze bezpečně obnovit; generated theme i stav ponechávám."
+    fi
     try_set org.gnome.desktop.interface icon-theme "'$BASE'"
-    python3 "$SCRIPT_DIR/steam-icons.py" "$BASE" '#2ED8E8' '#120C25' --restore-desktops >/dev/null 2>&1 || true
     rm -rf "$THEME_ROOT"
     printf 'tela-dark\n' > "$NOVA_CONFIG_DIR/current-icons"
     log "Obnoven icon theme i původní Icon= hodnoty launcherů: $BASE"

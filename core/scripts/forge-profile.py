@@ -13,6 +13,9 @@ from pathlib import Path
 
 HEX_RE = re.compile(r"^#?[0-9a-fA-F]{6}$")
 SLUG_RE = re.compile(r"[^a-z0-9]+")
+PROFILE_ID_RE = re.compile(r"^custom-[a-z0-9](?:[a-z0-9-]{0,47})$")
+THEME_NAME_RE = re.compile(r"^Fedora-Nova-Custom-[a-z0-9](?:[a-z0-9-]{0,47})$")
+WALLPAPER_NAME_RE = re.compile(r"^custom-[a-z0-9](?:[a-z0-9-]{0,47})\.svg$")
 
 GNOME_ACCENTS = {
     "blue": "#3584e4",
@@ -293,6 +296,12 @@ def paths() -> dict[str, Path]:
     }
 
 
+def direct_child(root: Path, name: object, label: str) -> Path:
+    if not isinstance(name, str) or not name or Path(name).name != name:
+        raise ValueError(f"Neplatný název {label} ve vlastním profilu.")
+    return root / name
+
+
 def create(args: argparse.Namespace) -> int:
     title = title_from_name(args.name)
     slug = slugify(title)
@@ -304,7 +313,7 @@ def create(args: argparse.Namespace) -> int:
 
     theme_name = f"Fedora-Nova-Custom-{slug}"
     wallpaper_name = f"custom-{slug}.svg"
-    palette_name = f"Fedora Nova Custom {title}.palette"
+    palette_name = f"Fedora Nova Custom {slug}.palette"
 
     profiles_path = loc["app"] / "config/profiles.json"
     base_colors = template_colors(profiles_path)
@@ -314,6 +323,18 @@ def create(args: argparse.Namespace) -> int:
     css = replace_css(template, colors, base_colors, title)
 
     theme_dir = loc["themes"] / theme_name / "gnome-shell"
+    destinations = (
+        theme_dir.parent,
+        loc["wallpapers"] / wallpaper_name,
+        loc["palettes"] / palette_name,
+        loc["custom"] / f"{profile_id}.json",
+    )
+    conflicts = [path for path in destinations if path.exists() or path.is_symlink()]
+    if conflicts:
+        raise ValueError(
+            "Forge profil už existuje; odmítám přepsat uživatelská data: "
+            + ", ".join(str(path) for path in conflicts)
+        )
     for directory in (theme_dir, loc["wallpapers"], loc["palettes"], loc["custom"]):
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -349,28 +370,64 @@ def create(args: argparse.Namespace) -> int:
 
 def delete(args: argparse.Namespace) -> int:
     profile_id = args.profile
-    if not profile_id.startswith("custom-"):
-        raise ValueError("Mazat lze pouze profily začínající custom-.")
+    if not PROFILE_ID_RE.fullmatch(profile_id):
+        raise ValueError("Mazat lze pouze platné Forge profily custom-*.")
     loc = paths()
     metadata_file = loc["custom"] / f"{profile_id}.json"
-    if not metadata_file.is_file():
+    if not metadata_file.is_file() or metadata_file.is_symlink():
         raise ValueError(f"Vlastní profil neexistuje: {profile_id}")
     current = loc["state"].read_text(encoding="utf-8").strip() if loc["state"].is_file() else ""
     if current == profile_id:
         raise ValueError("Aktivní vlastní profil nelze smazat. Nejprve přepni jiný profil.")
 
     item = json.loads(metadata_file.read_text(encoding="utf-8"))
-    shutil.rmtree(loc["themes"] / item["theme"], ignore_errors=True)
-    try:
-        (loc["wallpapers"] / item["wallpaper"]).unlink()
-    except FileNotFoundError:
-        pass
+    if not isinstance(item, dict) or item.get("id") != profile_id:
+        raise ValueError("Metadata Forge profilu neodpovídají mazanému profilu.")
+    slug = profile_id.removeprefix("custom-")
+    theme_name = item.get("theme")
+    wallpaper_name = item.get("wallpaper")
+    if (
+        theme_name != f"Fedora-Nova-Custom-{slug}"
+        or not isinstance(theme_name, str)
+        or not THEME_NAME_RE.fullmatch(theme_name)
+    ):
+        raise ValueError("Metadata Forge profilu obsahují neplatný theme cíl.")
+    if (
+        wallpaper_name != f"custom-{slug}.svg"
+        or not isinstance(wallpaper_name, str)
+        or not WALLPAPER_NAME_RE.fullmatch(wallpaper_name)
+    ):
+        raise ValueError("Metadata Forge profilu obsahují neplatný wallpaper cíl.")
+    theme = direct_child(loc["themes"], theme_name, "theme")
+    wallpaper = direct_child(loc["wallpapers"], wallpaper_name, "wallpaperu")
     palette_name = item.get("palette")
+    palette: Path | None = None
     if palette_name:
-        try:
-            (loc["palettes"] / palette_name).unlink()
-        except FileNotFoundError:
-            pass
+        palette = direct_child(loc["palettes"], palette_name, "palety")
+        legacy_title = str(item.get("title", ""))
+        if legacy_title.startswith("Nova "):
+            legacy_title = legacy_title.removeprefix("Nova ")
+        allowed_palettes = {
+            f"Fedora Nova Custom {slug}.palette",
+            f"Fedora Nova Custom {legacy_title}.palette",
+        }
+        if palette_name not in allowed_palettes:
+            raise ValueError("Metadata Forge profilu obsahují neplatný cíl palety.")
+
+    if theme.is_symlink() or (theme.exists() and not theme.is_dir()):
+        raise ValueError(f"Neočekávaný filesystem objekt místo Forge theme: {theme}")
+    if wallpaper.is_symlink() or (wallpaper.exists() and not wallpaper.is_file()):
+        raise ValueError(f"Neočekávaný filesystem objekt místo Forge wallpaperu: {wallpaper}")
+    if palette is not None and (
+        palette.is_symlink() or (palette.exists() and not palette.is_file())
+    ):
+        raise ValueError(f"Neočekávaný filesystem objekt místo Forge palety: {palette}")
+
+    if theme.exists():
+        shutil.rmtree(theme)
+    wallpaper.unlink(missing_ok=True)
+    if palette is not None:
+        palette.unlink(missing_ok=True)
     metadata_file.unlink()
     print(profile_id)
     return 0

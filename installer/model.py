@@ -51,6 +51,8 @@ class InstallContext:
         env = os.environ if environ is None else environ
         source = source_root.resolve(strict=True)
         home = _absolute_from_env(env.get("HOME", ""), "HOME")
+        if home == Path("/"):
+            raise InstallerError("HOME must not be the filesystem root.")
         data = _absolute_from_env(
             env.get("XDG_DATA_HOME", str(home / ".local/share")),
             "XDG_DATA_HOME",
@@ -95,6 +97,10 @@ class InstallContext:
                     "FEDORA_NOVA_INSTALLER_TEST_ROOT is required in testing mode."
                 )
             test_root = _absolute_from_env(test_root_raw, "FEDORA_NOVA_INSTALLER_TEST_ROOT")
+            if test_root == Path("/"):
+                raise InstallerError(
+                    "FEDORA_NOVA_INSTALLER_TEST_ROOT must not be the filesystem root."
+                )
             for label, root in {
                 "HOME": home,
                 "XDG_DATA_HOME": data,
@@ -273,6 +279,40 @@ def tree_fingerprint(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def assert_owned_tree(path: Path) -> None:
+    """Require every object in a tree to belong to the invoking user.
+
+    Symlinks are inspected as links and are never traversed.
+    """
+    if not lexists(path):
+        return
+
+    def check(item: Path) -> None:
+        try:
+            info = item.lstat()
+        except OSError as exc:
+            raise InstallerError(f"Cannot establish ownership of {item}: {exc}") from exc
+        if info.st_uid != os.getuid():
+            raise InstallerError(
+                f"Refusing object not owned by the current user: {item}"
+            )
+
+    check(path)
+    if path_kind(path) != "directory":
+        return
+    for root, directories, files in os.walk(path, topdown=True, followlinks=False):
+        root_path = Path(root)
+        directories.sort()
+        files.sort()
+        for name in list(directories):
+            item = root_path / name
+            check(item)
+            if item.is_symlink():
+                directories.remove(name)
+        for name in files:
+            check(root_path / name)
+
+
 def copy_path_nofollow(source: Path, destination: Path) -> None:
     kind = path_kind(source)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -290,6 +330,7 @@ def safe_remove(context: InstallContext, path: Path) -> None:
     target = context.assert_safe_target(path)
     if not lexists(target):
         return
+    assert_owned_tree(target)
     kind = path_kind(target)
     if kind == "directory":
         shutil.rmtree(target)
@@ -319,6 +360,8 @@ def atomic_replace(context: InstallContext, source: Path, target: Path) -> None:
 
 def atomic_write_json(context: InstallContext, path: Path, data: Any) -> None:
     target = context.assert_safe_target(path)
+    if lexists(target):
+        assert_owned_tree(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     target = context.assert_safe_target(path)
     fd, name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)

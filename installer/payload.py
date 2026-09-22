@@ -4,7 +4,9 @@ import os
 from pathlib import Path, PurePosixPath
 import posixpath
 import shutil
+import subprocess
 import tarfile
+from typing import Callable
 
 from .model import Artifact, InstallContext, InstallerError
 
@@ -35,7 +37,9 @@ CORE_EXCLUDED_FILES = {
     "scripts/build-theme-sass.sh",
     "scripts/preview_reload.py",
     "scripts/preview_settings.py",
+    "scripts/preview_paths.py",
     "scripts/theme_hot_reload.py",
+    "scripts/theme_hot_reload_core.py",
 }
 CORE_EXCLUDED_DIRS = {
     "themes-src",
@@ -65,11 +69,69 @@ def _validate_source_tree(root: Path) -> None:
             raise InstallerError(f"Source symlink escapes repository tree: {item} -> {resolved}")
 
 
-def _copy_core(source: Path, destination: Path) -> None:
+def _tracked_repository_paths(repository: Path) -> set[str] | None:
+    if (repository / ".git").exists():
+        git = shutil.which("git")
+        if git is None:
+            raise InstallerError(
+                "git is required to select reviewed payload files from a checkout"
+            )
+        result = subprocess.run(
+            [git, "-C", str(repository), "ls-files", "-z"],
+            text=False,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.decode(errors="replace").strip()
+            raise InstallerError(f"Cannot enumerate tracked payload files: {detail}")
+        return {
+            Path(os.fsdecode(name)).as_posix()
+            for name in result.stdout.split(b"\0")
+            if name
+        }
+    return None
+
+
+def _is_reviewed_path(
+    repository: Path,
+    path: Path,
+    tracked: set[str] | None,
+) -> bool:
+    if tracked is None:
+        return True
+    relative = path.relative_to(repository).as_posix()
+    return relative in tracked or any(item.startswith(relative + "/") for item in tracked)
+
+
+def _copy_reviewed_tree(
+    repository: Path,
+    source: Path,
+    destination: Path,
+    tracked: set[str] | None,
+    *,
+    extra_ignore: Callable[[str, list[str]], set[str]] | None = None,
+) -> None:
+    def ignored(directory: str, names: list[str]) -> set[str]:
+        ignored_names = set(extra_ignore(directory, names)) if extra_ignore else set()
+        for name in names:
+            path = Path(directory) / name
+            if not _is_reviewed_path(repository, path, tracked):
+                ignored_names.add(name)
+        return ignored_names
+
+    shutil.copytree(source, destination, symlinks=True, ignore=ignored)
+
+
+def _copy_core(
+    source: Path,
+    destination: Path,
+    tracked: set[str] | None = None,
+) -> None:
     _ensure_source(source, "directory")
     _validate_source_tree(source)
+    repository = source.parent
 
-    def ignored(directory: str, names: list[str]) -> set[str]:
+    def core_ignored(directory: str, names: list[str]) -> set[str]:
         parent = Path(directory).relative_to(source)
         ignored_names: set[str] = set()
         for name in names:
@@ -80,7 +142,13 @@ def _copy_core(source: Path, destination: Path) -> None:
                 ignored_names.add(name)
         return ignored_names
 
-    shutil.copytree(source, destination, symlinks=True, ignore=ignored)
+    _copy_reviewed_tree(
+        repository,
+        source,
+        destination,
+        tracked,
+        extra_ignore=core_ignored,
+    )
 
 
 def _render(source: Path, destination: Path, replacements: dict[str, str], mode: int) -> None:
@@ -230,6 +298,7 @@ def _install_trash_icons(core: Path, icons_root: Path) -> None:
 def artifacts(context: InstallContext) -> list[Artifact]:
     data = context.data_home
     config = context.config_home
+    tracked = _tracked_repository_paths(context.source_root)
     result = [
         Artifact("runtime", "package-runtime", data / "fedora-nova"),
         Artifact("launcher", "bin/fedora-nova", context.prefix / "bin/fedora-nova"),
@@ -261,7 +330,9 @@ def artifacts(context: InstallContext) -> list[Artifact]:
                 data / f"backgrounds/fedora-nova/{path.name}",
             )
             for path in sorted(wallpaper_source.iterdir())
-            if path.is_file() and not path.is_symlink()
+            if path.is_file()
+            and not path.is_symlink()
+            and _is_reviewed_path(context.source_root, path, tracked)
         )
     result.extend(
         Artifact("ptyxis", f"ptyxis/{name}", data / f"org.gnome.Ptyxis/palettes/{name}")
@@ -287,17 +358,22 @@ def artifacts(context: InstallContext) -> list[Artifact]:
 def build_payload(context: InstallContext, destination: Path) -> list[Artifact]:
     source = context.source_root
     _validate_source_tree(source)
+    tracked = _tracked_repository_paths(source)
     core = source / "core"
     _ensure_source(core, "directory")
     destination.mkdir(parents=True, exist_ok=False)
 
     package = destination / "package-runtime"
     package.mkdir()
-    _copy_core(core, package / "core")
-    shutil.copytree(
+    _copy_core(core, package / "core", tracked)
+    _copy_reviewed_tree(
+        source,
         _ensure_source(source / "app/src/fedora_nova", "directory"),
         package / "fedora_nova",
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        tracked,
+        extra_ignore=lambda directory, names: set(
+            shutil.ignore_patterns("__pycache__", "*.pyc")(directory, names)
+        ),
     )
 
     python = shutil.which("python3") or "/usr/bin/python3"
@@ -334,11 +410,17 @@ def build_payload(context: InstallContext, destination: Path) -> list[Artifact]:
     for theme in THEMES:
         target = destination / f"themes/{theme}"
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(_ensure_source(core / f"themes/{theme}", "directory"), target, symlinks=True)
-    shutil.copytree(
+        _copy_reviewed_tree(
+            source,
+            _ensure_source(core / f"themes/{theme}", "directory"),
+            target,
+            tracked,
+        )
+    _copy_reviewed_tree(
+        source,
         _ensure_source(core / "assets/wallpapers", "directory"),
         destination / "backgrounds/fedora-nova",
-        symlinks=True,
+        tracked,
     )
     for name in PTYXIS_PALETTES:
         target = destination / f"ptyxis/{name}"
@@ -354,12 +436,25 @@ def build_payload(context: InstallContext, destination: Path) -> list[Artifact]:
 
     extension = destination / f"extensions/{TOPBAR_UUID}"
     extension.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(
+    _copy_reviewed_tree(
+        source,
         _ensure_source(core / f"third-party/topbar-all-monitors/{TOPBAR_UUID}", "directory"),
         extension,
-        symlinks=True,
+        tracked,
     )
 
+    # Source links that are in-repository can still escape after relocation
+    # into the package layout. Validate the completed payload in its own root.
+    _validate_source_tree(destination)
+    # Managed directory artifacts are installed independently. A link that is
+    # safe only because another staging sibling exists would escape its final
+    # installed component, so validate those component boundaries as well.
+    _validate_source_tree(package)
+    for theme in THEMES:
+        _validate_source_tree(destination / f"themes/{theme}")
+    _validate_source_tree(destination / "backgrounds/fedora-nova")
+    _validate_source_tree(icons)
+    _validate_source_tree(extension)
     result = artifacts(context)
     for artifact in result:
         if not (destination / artifact.payload_name).exists() and not (destination / artifact.payload_name).is_symlink():

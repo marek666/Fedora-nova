@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import fcntl
 import json
 import os
 from pathlib import Path
 from pathlib import PurePosixPath
 import platform
+import re
+import shlex
 import shutil
+import stat
 import subprocess
 import tempfile
 from typing import Any, Iterable, TextIO
@@ -18,6 +22,7 @@ from .model import (
     CleanupCandidate,
     InstallContext,
     InstallerError,
+    assert_owned_tree,
     atomic_replace,
     atomic_write_json,
     copy_path_nofollow,
@@ -34,6 +39,7 @@ from .payload import PTYXIS_PALETTES, TELA_THEMES, THEMES, TOPBAR_UUID, artifact
 
 INSTALLER_VERSION = "2"
 LEGACY_PALETTE_SHA256 = "675966d3d4bd29309c61055236ab254def68111eea8de225fa2a21755e4cb0d3"
+BACKUP_ID_RE = re.compile(r"^[0-9]{8}-[0-9]{6}-[0-9]{6}$")
 
 SETTING_NAMES = (
     "current-profile",
@@ -138,15 +144,75 @@ class Installer:
         context = self.context
         context.assert_safe_target(context.state_dir, allow_leaf_symlink=False)
         context.state_dir.mkdir(parents=True, exist_ok=True)
-        context.assert_safe_target(context.state_dir, allow_leaf_symlink=False)
-        context.assert_safe_target(context.backup_root, allow_leaf_symlink=False)
-        context.assert_safe_target(context.log_root, allow_leaf_symlink=False)
+        for path in (context.state_dir, context.backup_root, context.log_root):
+            context.assert_safe_target(path, allow_leaf_symlink=False)
+            if not lexists(path):
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISDIR(info.st_mode)
+                or info.st_uid != os.getuid()
+                or info.st_mode & 0o022
+            ):
+                raise InstallerError(
+                    f"Installer state directory ownership or mode is unsafe: {path}"
+                )
+
+    def _preflight_state_files(self) -> None:
+        for path in (self.context.manifest_path, self.context.install_state_path):
+            self.context.assert_safe_target(path)
+            if lexists(path) and path_kind(path) not in {"file", "symlink"}:
+                raise InstallerError(
+                    f"Installer state file path has an unexpected type: {path}"
+                )
+
+    def _acquire_transaction_lock(self) -> int:
+        lock_path = self.context.state_dir / ".installer-v2.lock"
+        self.context.assert_safe_target(lock_path, allow_leaf_symlink=False)
+        try:
+            fd = os.open(
+                lock_path,
+                os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW,
+                0o600,
+            )
+        except OSError as exc:
+            raise InstallerError(f"Cannot open installer transaction lock: {lock_path}") from exc
+        try:
+            info = os.fstat(fd)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.getuid()
+                or info.st_nlink != 1
+                or info.st_mode & 0o022
+            ):
+                raise InstallerError(f"Unsafe installer transaction lock: {lock_path}")
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise InstallerError(
+                    "Another Fedora Nova install, rollback, or uninstall is already running"
+                ) from exc
+            return fd
+        except Exception:
+            os.close(fd)
+            raise
+
+    def _release_transaction_lock(self, fd: int | None) -> None:
+        if fd is None:
+            return
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
     def _timestamp(self) -> str:
         return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
 
     def _iso_now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _rollback_command(self, backup: Path) -> str:
+        return f"./install.sh --rollback {shlex.quote(str(backup))}"
 
     def _project_version(self) -> str:
         path = self.context.source_root / "VERSION"
@@ -223,7 +289,9 @@ class Installer:
             desired_themes = set(THEMES)
             for path in themes_dir.glob("Fedora-Nova-*"):
                 if path.name not in desired_themes and not path.name.startswith("Fedora-Nova-Custom-"):
-                    candidates.append(CleanupCandidate("stale-shell-theme", path))
+                    candidates.append(
+                        CleanupCandidate("stale-shell-theme", path, "uncertain")
+                    )
         wallpaper_dir = data / "backgrounds/fedora-nova"
         source_wallpapers = self.context.source_root / "core/assets/wallpapers"
         desired_wallpapers = {
@@ -234,12 +302,16 @@ class Installer:
         if wallpaper_dir.is_dir() and not wallpaper_dir.is_symlink():
             for path in wallpaper_dir.glob("fedora-nova-*"):
                 if path.name not in desired_wallpapers:
-                    candidates.append(CleanupCandidate("stale-wallpaper", path))
+                    candidates.append(
+                        CleanupCandidate("stale-wallpaper", path, "uncertain")
+                    )
         palette_dir = data / "org.gnome.Ptyxis/palettes"
         if palette_dir.is_dir() and not palette_dir.is_symlink():
             for path in palette_dir.glob("Fedora Nova *.palette"):
                 if path.name not in PTYXIS_PALETTES and not path.name.startswith("Fedora Nova Custom ") and path.name != "Fedora Nova.palette":
-                    candidates.append(CleanupCandidate("stale-ptyxis-palette", path))
+                    candidates.append(
+                        CleanupCandidate("stale-ptyxis-palette", path, "uncertain")
+                    )
         return candidates
 
     def _is_owned_legacy(self, candidate: CleanupCandidate) -> bool:
@@ -290,6 +362,23 @@ class Installer:
                 )
                 continue
             if safe not in desired:
+                component = entry.get("component")
+                expected_type = entry.get("type")
+                expected_fingerprint = entry.get("fingerprint")
+                if (
+                    not isinstance(component, str)
+                    or expected_type not in {"file", "directory", "symlink"}
+                    or not isinstance(expected_fingerprint, str)
+                    or not lexists(safe)
+                    or path_kind(safe) != expected_type
+                    or self._artifact_fingerprint(safe, component)
+                    != expected_fingerprint
+                ):
+                    warnings.append(
+                        f"Stale manifest ownership evidence does not match; "
+                        f"path left untouched: {safe}"
+                    )
+                    continue
                 stale.append(CleanupCandidate("stale-manifest-target", safe, "manifest"))
         return stale
 
@@ -323,15 +412,22 @@ class Installer:
             for parent, prefix, excluded in parent_rules
         )
 
-    def _is_registered_backup_path(self, path: Path) -> bool:
-        """Constrain rollback metadata to installer-owned or preserved settings paths."""
-        context = self.context
-        if self._is_registered_managed_path(path):
-            return True
-        if path in {
+    def _is_registered_transaction_path(self, path: Path) -> bool:
+        return self._is_registered_managed_path(path) or path in {
             *self._shared_cache_targets(),
-            context.manifest_path,
-            context.install_state_path,
+            self.context.manifest_path,
+            self.context.install_state_path,
+        }
+
+    def _is_registered_setting_path(self, path: Path) -> bool:
+        context = self.context
+        config = context.config_home / "fedora-nova"
+        if path in {
+            *(config / name for name in SETTING_NAMES),
+            config / "custom-profiles",
+            config / "integrations/blur-my-shell",
+            config / "session-restore",
+            context.config_home / "autostart/fedora-nova-session.desktop",
             context.config_home / "gtk-3.0/gtk.css",
             context.config_home / "gtk-4.0/gtk.css",
             context.config_home / "gnome-initial-setup-done",
@@ -339,12 +435,8 @@ class Installer:
             context.state_dir / "steam-icons",
         }:
             return True
-        config = context.config_home / "fedora-nova"
-        if config in path.parents:
-            return True
         autostart = context.config_home / "autostart"
         if path.parent == autostart and path.name in {
-            "fedora-nova-session.desktop",
             "org.gnome.Tour.desktop",
             "gnome-tour.desktop",
             "gnome-initial-setup.desktop",
@@ -489,8 +581,8 @@ class Installer:
             else:
                 plan.install.append(artifact)
 
-        candidates = self._legacy_candidates()
-        candidates.extend(self._manifest_stale_candidates(desired, plan.warnings))
+        candidates = self._manifest_stale_candidates(desired, plan.warnings)
+        candidates.extend(self._legacy_candidates())
         seen: set[Path] = set()
         for candidate in candidates:
             if candidate.target in seen or candidate.target in desired or not lexists(candidate.target):
@@ -606,6 +698,30 @@ class Installer:
             records.append(record)
         return records
 
+    def _copy_backup_object(self, source: Path, destination: Path) -> tuple[str, str]:
+        """Copy one object and prove that the backup matches a stable source view."""
+        assert_owned_tree(source)
+        original_type = path_kind(source)
+        original_fingerprint = tree_fingerprint(source)
+        copy_path_nofollow(source, destination)
+        backup_fingerprint = tree_fingerprint(destination)
+        try:
+            current_type = path_kind(source)
+            current_fingerprint = tree_fingerprint(source)
+        except OSError as exc:
+            raise InstallerError(
+                f"Backup source changed or disappeared while being copied: {source}"
+            ) from exc
+        if (
+            current_type != original_type
+            or current_fingerprint != original_fingerprint
+            or backup_fingerprint != original_fingerprint
+        ):
+            raise InstallerError(
+                f"Backup verification failed because the source changed or the copy differs: {source}"
+            )
+        return original_type, original_fingerprint
+
     def _create_backup(
         self,
         affected: Iterable[Path],
@@ -614,12 +730,37 @@ class Installer:
     ) -> Path:
         context = self.context
         self._prepare_state_root()
+        unique: list[Path] = []
+        seen: set[Path] = set()
+        for path in affected:
+            safe = context.assert_safe_target(path)
+            if safe not in seen:
+                seen.add(safe)
+                unique.append(safe)
+        setting_paths: list[tuple[str, Path]] = []
+        for name, path in self._setting_paths_for_backup():
+            try:
+                safe = context.assert_safe_target(path)
+            except InstallerError as exc:
+                raise InstallerError(
+                    f"Cannot safely back up preserved user setting {name}: {exc}"
+                ) from exc
+            setting_paths.append((name, safe))
+
+        # Establish ownership for every source before creating even a partial
+        # backup. Any unexpected owner aborts the transaction without touching
+        # the existing manifest or install state.
+        for path in [*unique, *(path for _, path in setting_paths)]:
+            if lexists(path):
+                assert_owned_tree(path)
+
         context.backup_root.mkdir(parents=True, exist_ok=True)
+        self._prepare_state_root()
         backup_id = self._timestamp()
         temporary = context.backup_root / f".{backup_id}.incomplete"
         final = context.backup_root / backup_id
         temporary.mkdir(mode=0o700)
-        if final.exists():
+        if lexists(final):
             raise InstallerError(f"Backup already exists: {final}")
         objects = temporary / "objects"
         settings_dir = temporary / "settings/files"
@@ -629,48 +770,39 @@ class Installer:
         dconf_dir.mkdir(parents=True)
 
         entries: list[dict[str, Any]] = []
-        unique: list[Path] = []
-        seen: set[Path] = set()
-        for path in affected:
-            safe = context.assert_safe_target(path)
-            if safe not in seen:
-                seen.add(safe)
-                unique.append(safe)
         for index, path in enumerate(unique):
             entry: dict[str, Any] = {"path": str(path), "existed": lexists(path)}
             if lexists(path):
                 ref = f"objects/{index:04d}"
                 backup_object = temporary / ref
-                copy_path_nofollow(path, backup_object)
+                object_type, fingerprint = self._copy_backup_object(
+                    path, backup_object
+                )
                 entry.update(
                     {
                         "backup": ref,
-                        "type": path_kind(path),
-                        "fingerprint": tree_fingerprint(path),
-                        "backup_fingerprint": tree_fingerprint(backup_object),
+                        "type": object_type,
+                        "fingerprint": fingerprint,
+                        "backup_fingerprint": fingerprint,
                     }
                 )
             entries.append(entry)
 
         settings: list[dict[str, Any]] = []
-        for index, (name, path) in enumerate(self._setting_paths_for_backup()):
-            try:
-                safe = context.assert_safe_target(path)
-            except InstallerError as exc:
-                raise InstallerError(
-                    f"Cannot safely back up preserved user setting {name}: {exc}"
-                ) from exc
+        for index, (name, safe) in enumerate(setting_paths):
             entry = {"name": name, "path": str(safe), "existed": lexists(safe)}
             if lexists(safe):
                 ref = f"settings/files/{index:04d}"
                 backup_object = temporary / ref
-                copy_path_nofollow(safe, backup_object)
+                object_type, fingerprint = self._copy_backup_object(
+                    safe, backup_object
+                )
                 entry.update(
                     {
                         "backup": ref,
-                        "type": path_kind(safe),
-                        "fingerprint": tree_fingerprint(safe),
-                        "backup_fingerprint": tree_fingerprint(backup_object),
+                        "type": object_type,
+                        "fingerprint": fingerprint,
+                        "backup_fingerprint": fingerprint,
                     }
                 )
             settings.append(entry)
@@ -753,11 +885,29 @@ class Installer:
         if raw and self._mutation_count >= int(raw):
             raise InstallerError(f"Injected test failure after mutation {self._mutation_count}")
 
+    def _reset_transaction_state(self) -> None:
+        self.last_backup = None
+        self._mutation_count = 0
+
     def install(self) -> Path | None:
+        self._reset_transaction_state()
         context = self.context
         # Complete the read-only path preflight before creating logs or state.
-        initial = self.discover()
+        self.discover()
+        self._preflight_state_files()
         self._prepare_state_root()
+        lock_fd = self._acquire_transaction_lock()
+        try:
+            return self._install_locked()
+        finally:
+            self._release_transaction_lock(lock_fd)
+
+    def _install_locked(self) -> Path | None:
+        context = self.context
+        # Repeat discovery under the transaction lock so no concurrent Fedora
+        # Nova transaction can invalidate the ownership plan.
+        initial = self.discover()
+        self._preflight_state_files()
         log_path = context.log_root / f"install-{self._timestamp()}.log"
         self.reporter.close()
         self.reporter = Reporter(self.stream, log_path)
@@ -794,8 +944,10 @@ class Installer:
 
                 desired_paths = {artifact.target for artifact in desired}
                 cleanup_warnings: list[str] = []
-                cleanup = self._legacy_candidates()
-                cleanup.extend(self._manifest_stale_candidates(desired_paths, cleanup_warnings))
+                cleanup = self._manifest_stale_candidates(
+                    desired_paths, cleanup_warnings
+                )
+                cleanup.extend(self._legacy_candidates())
                 removable: list[CleanupCandidate] = []
                 seen: set[Path] = set()
                 for candidate in cleanup:
@@ -947,30 +1099,31 @@ class Installer:
             self.reporter.stage("COMPLETE")
             self.reporter.line(f"Manifest: {context.manifest_path}")
             if backup:
-                self.reporter.line(f"Rollback: ./install.sh --rollback {backup}")
+                self.reporter.line(f"Rollback: {self._rollback_command(backup)}")
             return backup
         except Exception as exc:
-            try:
-                atomic_write_json(
-                    context,
-                    context.install_state_path,
-                    {
-                        "format_version": FORMAT_VERSION,
-                        "status": "failed",
-                        "backup": str(backup or self.last_backup) if (backup or self.last_backup) else None,
-                        "log": str(log_path),
-                        "error": str(exc),
-                        "updated_at": self._iso_now(),
-                    },
-                )
-            except Exception:
-                pass
+            if backup or self.last_backup:
+                try:
+                    atomic_write_json(
+                        context,
+                        context.install_state_path,
+                        {
+                            "format_version": FORMAT_VERSION,
+                            "status": "failed",
+                            "backup": str(backup or self.last_backup),
+                            "log": str(log_path),
+                            "error": str(exc),
+                            "updated_at": self._iso_now(),
+                        },
+                    )
+                except Exception:
+                    pass
             if backup or self.last_backup:
                 self.reporter.line(
                     f"Installation failed. Backup: {backup or self.last_backup}"
                 )
                 self.reporter.line(
-                    f"Rollback command: ./install.sh --rollback {backup or self.last_backup}"
+                    f"Rollback command: {self._rollback_command(backup or self.last_backup)}"
                 )
             raise
         finally:
@@ -1081,6 +1234,8 @@ class Installer:
             self.context.backup_root, allow_leaf_symlink=False
         )
         root = self.context.backup_root.resolve(strict=False)
+        if not root.is_dir() or root.is_symlink():
+            raise InstallerError(f"Backup root is missing or unsafe: {root}")
         if path.is_symlink():
             raise InstallerError(f"Backup path must not be a symlink: {path}")
         try:
@@ -1089,13 +1244,58 @@ class Installer:
             raise InstallerError(f"Backup does not exist: {path}") from exc
         if resolved.parent != root:
             raise InstallerError(f"Backup must be a direct child of {root}: {resolved}")
+        info = resolved.lstat()
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.getuid()
+            or info.st_mode & 0o022
+        ):
+            raise InstallerError(f"Backup directory ownership or mode is unsafe: {resolved}")
+        if not BACKUP_ID_RE.fullmatch(resolved.name):
+            raise InstallerError(f"Backup directory name is invalid: {resolved.name}")
         metadata_path = resolved / "backup.json"
         if metadata_path.is_symlink():
             raise InstallerError("Backup metadata must not be a symlink")
+        try:
+            metadata_info = metadata_path.lstat()
+        except OSError as exc:
+            raise InstallerError(f"Backup metadata is missing: {metadata_path}") from exc
+        if (
+            not stat.S_ISREG(metadata_info.st_mode)
+            or metadata_info.st_uid != os.getuid()
+            or metadata_info.st_nlink != 1
+        ):
+            raise InstallerError(f"Backup metadata object is unsafe: {metadata_path}")
         metadata = load_json(metadata_path)
         if metadata is None or metadata.get("format_version") != FORMAT_VERSION:
             raise InstallerError(f"Invalid Installer V2 backup: {resolved}")
+        if metadata.get("installer_version") != INSTALLER_VERSION:
+            raise InstallerError(f"Backup installer version is invalid: {resolved}")
+        if metadata.get("backup_id") != resolved.name:
+            raise InstallerError(f"Backup identity does not match its directory: {resolved}")
+        for parts in (("objects",), ("settings", "files"), ("settings", "dconf")):
+            self._backup_directory(resolved, parts)
         return resolved, metadata
+
+    def _backup_directory(self, backup: Path, parts: tuple[str, ...]) -> Path:
+        current = backup
+        for part in parts:
+            current = current / part
+            try:
+                info = current.lstat()
+            except OSError as exc:
+                raise InstallerError(f"Backup directory is missing: {current}") from exc
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise InstallerError(f"Backup path must be a real directory: {current}")
+            if info.st_uid != os.getuid():
+                raise InstallerError(
+                    f"Backup directory ownership is unsafe: {current}"
+                )
+        try:
+            current.resolve(strict=True).relative_to(backup.resolve(strict=True))
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise InstallerError(f"Backup directory escapes its root: {current}") from exc
+        return current
 
     def _backup_object(
         self,
@@ -1112,15 +1312,21 @@ class Installer:
         if relative.is_absolute() or ".." in parts:
             raise InstallerError(f"Unsafe backup object reference: {reference}")
         if settings:
-            valid = len(parts) == 3 and parts[:2] == expected and parts[2].isdigit()
+            valid = (
+                len(parts) == 3
+                and parts[:2] == expected
+                and re.fullmatch(r"[0-9]+", parts[2]) is not None
+            )
         else:
-            valid = len(parts) == 2 and parts[:1] == expected and parts[1].isdigit()
+            valid = (
+                len(parts) == 2
+                and parts[:1] == expected
+                and re.fullmatch(r"[0-9]+", parts[1]) is not None
+            )
         if not valid:
             raise InstallerError(f"Unexpected backup object reference: {reference}")
-        candidate = backup.joinpath(*parts)
-        expected_parent = backup.joinpath(*parts[:-1]).resolve(strict=True)
-        if candidate.parent.resolve(strict=True) != expected_parent:
-            raise InstallerError(f"Backup object parent changed unexpectedly: {candidate}")
+        expected_parent = self._backup_directory(backup, tuple(parts[:-1]))
+        candidate = expected_parent / parts[-1]
         return candidate
 
     def _restore_entry(
@@ -1132,14 +1338,22 @@ class Installer:
     ) -> None:
         path = Path(entry["path"])
         self.context.assert_safe_target(path)
-        if lexists(path):
-            safe_remove(self.context, path)
+        ref: Path | None = None
         if entry.get("existed"):
             ref = self._backup_object(
                 backup, entry.get("backup"), settings=settings
             )
             if not lexists(ref):
                 raise InstallerError(f"Backup object is missing: {ref}")
+            assert_owned_tree(ref)
+            expected = entry.get("backup_fingerprint", entry.get("fingerprint"))
+            if not isinstance(expected, str) or tree_fingerprint(ref) != expected:
+                raise InstallerError(f"Backup object checksum mismatch: {ref}")
+            if entry.get("type") != path_kind(ref):
+                raise InstallerError(f"Backup object type mismatch: {ref}")
+        if lexists(path):
+            safe_remove(self.context, path)
+        if ref is not None:
             atomic_replace(self.context, ref, path)
 
     def _validated_dconf_entries(
@@ -1148,13 +1362,11 @@ class Installer:
         raw = metadata.get("dconf", [])
         if not isinstance(raw, list):
             raise InstallerError("Backup dconf metadata is malformed")
-        saved = [entry for entry in raw if isinstance(entry, dict) and entry.get("status") == "saved"]
-        if not saved:
-            return []
-        if self._command("dconf") is None:
-            raise InstallerError("dconf is required to restore settings from this backup")
         result: list[tuple[dict[str, Any], Path]] = []
-        for entry in saved:
+        seen: set[str] = set()
+        for entry in raw:
+            if not isinstance(entry, dict):
+                raise InstallerError("Backup dconf metadata contains a malformed entry")
             entry_name = entry.get("name")
             entry_path = entry.get("path")
             if (
@@ -1164,44 +1376,59 @@ class Installer:
                 raise InstallerError(
                     f"Unexpected dconf restore target: {entry_name!r} {entry_path!r}"
                 )
+            if entry_name in seen:
+                raise InstallerError(f"Duplicate dconf backup entry: {entry_name}")
+            seen.add(entry_name)
+            status = entry.get("status")
+            if status not in {"saved", "failed", "unavailable"}:
+                raise InstallerError(
+                    f"Unexpected dconf backup status for {entry_name}: {status!r}"
+                )
+            if status != "saved":
+                continue
             name = entry.get("file")
             if (
                 not isinstance(name, str)
-                or Path(name).name != name
-                or not name.endswith(".dconf")
+                or name != f"{entry_name}.dconf"
             ):
                 raise InstallerError(f"Unsafe dconf backup reference: {name!r}")
-            source = backup / "settings/dconf" / name
+            dconf_dir = self._backup_directory(backup, ("settings", "dconf"))
+            source = dconf_dir / name
             if not source.is_file() or source.is_symlink():
                 raise InstallerError(f"Missing dconf backup file: {source}")
+            source_info = source.lstat()
+            if source_info.st_uid != os.getuid() or source_info.st_nlink != 1:
+                raise InstallerError(f"Unsafe dconf backup file: {source}")
             if not isinstance(entry.get("sha256"), str) or sha256_file(source) != entry["sha256"]:
                 raise InstallerError(f"dconf backup checksum mismatch: {source}")
             result.append((entry, source))
+        if seen != set(DCONF_PATHS):
+            missing = sorted(set(DCONF_PATHS) - seen)
+            extra = sorted(seen - set(DCONF_PATHS))
+            raise InstallerError(
+                f"Backup dconf metadata is incomplete (missing={missing}, extra={extra})"
+            )
         return result
 
-    def _restore_dconf(self, entries: list[tuple[dict[str, Any], Path]]) -> None:
-        command = self._command("dconf")
-        if entries and command is None:
-            raise InstallerError("dconf disappeared before settings restore")
-        for entry, source in entries:
-            result = subprocess.run(
-                [command, "load", entry["path"]],
-                env=self.environ,
-                text=True,
-                input=source.read_text(encoding="utf-8"),
-                capture_output=True,
-            )
-            if result.returncode != 0:
-                raise InstallerError(
-                    f"Failed to restore dconf {entry['path']}: {result.stderr.strip()}"
-                )
-
     def rollback(self, backup_path: Path) -> Path:
-        backup, metadata = self._validated_backup(backup_path)
+        self._reset_transaction_state()
+        # Reject an untrusted path before creating state, then revalidate it
+        # after taking the transaction lock to close the concurrent-operation
+        # window.
+        self._validated_backup(backup_path)
         self._prepare_state_root()
+        lock_fd = self._acquire_transaction_lock()
+        try:
+            return self._rollback_locked(backup_path)
+        finally:
+            self._release_transaction_lock(lock_fd)
+
+    def _rollback_locked(self, backup_path: Path) -> Path:
+        backup, metadata = self._validated_backup(backup_path)
         log_path = self.context.log_root / f"rollback-{self._timestamp()}.log"
         self.reporter.close()
         self.reporter = Reporter(self.stream, log_path)
+        safety: Path | None = None
         try:
             self.reporter.stage("ROLLBACK PREFLIGHT")
             entries = metadata.get("entries", [])
@@ -1209,18 +1436,30 @@ class Installer:
             if not isinstance(entries, list) or not isinstance(settings, list):
                 raise InstallerError("Backup entry lists are malformed")
             current_paths: list[Path] = []
+            seen_paths: set[Path] = set()
             for collection, is_settings in ((entries, False), (settings, True)):
                 for entry in collection:
                     if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
                         raise InstallerError("Backup contains a malformed path entry")
                     path = Path(entry["path"])
                     self.context.assert_safe_target(path)
-                    if not self._is_registered_backup_path(path):
+                    if path in seen_paths:
+                        raise InstallerError(f"Backup contains a duplicate target: {path}")
+                    seen_paths.add(path)
+                    registered = (
+                        self._is_registered_setting_path(path)
+                        if is_settings
+                        else self._is_registered_transaction_path(path)
+                    )
+                    if not registered:
                         raise InstallerError(
                             f"Backup target is not in the Fedora Nova registry: {path}"
                         )
-                    current_paths.append(path)
-                    if entry.get("existed"):
+                    if not isinstance(entry.get("existed"), bool):
+                        raise InstallerError(f"Backup existence marker is invalid: {path}")
+                    if not is_settings:
+                        current_paths.append(path)
+                    if entry["existed"]:
                         ref = self._backup_object(
                             backup,
                             entry.get("backup"),
@@ -1228,6 +1467,12 @@ class Installer:
                         )
                         if not lexists(ref):
                             raise InstallerError(f"Backup object is missing: {ref}")
+                        if entry.get("type") not in {
+                            "file", "directory", "symlink"
+                        } or path_kind(ref) != entry["type"]:
+                            raise InstallerError(
+                                f"Backup object type mismatch: {ref}"
+                            )
                         expected = entry.get(
                             "backup_fingerprint", entry.get("fingerprint")
                         )
@@ -1238,9 +1483,19 @@ class Installer:
                             raise InstallerError(
                                 f"Backup object checksum mismatch: {ref}"
                             )
+                    elif any(
+                        key in entry
+                        for key in ("backup", "type", "fingerprint", "backup_fingerprint")
+                    ):
+                        raise InstallerError(
+                            f"Nonexistent backup target has object metadata: {path}"
+                        )
 
             dconf_entries = self._validated_dconf_entries(backup, metadata)
 
+            for cache in self._shared_cache_targets():
+                if cache not in current_paths:
+                    current_paths.append(cache)
             safety = self._create_backup(
                 current_paths, reason=f"pre-rollback-{backup.name}"
             )
@@ -1249,27 +1504,89 @@ class Installer:
             for entry in reversed(entries):
                 self.reporter.line(f"RESTORE {entry['path']}")
                 self._restore_entry(backup, entry)
+                self._failpoint()
             self.reporter.stage("RESTORE USER SETTINGS")
-            for entry in settings:
-                self._restore_entry(backup, entry, settings=True)
-            self._restore_dconf(dconf_entries)
+            self.reporter.line(
+                "Preserved settings and dconf were not modified by Installer V2; "
+                "their backup copies remain available and are not replayed over newer user state."
+            )
+            if settings or dconf_entries:
+                self.reporter.line(
+                    f"Settings snapshot retained in: {backup / 'settings'}"
+                )
             self._refresh_caches()
             self.reporter.stage("ROLLBACK COMPLETE")
             self.reporter.line(f"Restored backup: {backup}")
             return safety
+        except Exception:
+            if safety is not None:
+                self.reporter.line(f"Rollback failed. Pre-rollback backup: {safety}")
+                self.reporter.line(
+                    f"Recovery command: {self._rollback_command(safety)}"
+                )
+            raise
         finally:
             self.reporter.close()
 
-    def uninstall(self, *, dry_run: bool = False) -> Path | None:
-        manifest = load_json(self.context.manifest_path)
-        if manifest is None or manifest.get("format_version") != FORMAT_VERSION:
-            raise InstallerError("Installer V2 manifest is required for safe uninstall")
+    def _validated_uninstall_targets(self, manifest: dict[str, Any]) -> list[Path]:
+        raw_targets = manifest.get("managed_targets")
+        if not isinstance(raw_targets, list) or not raw_targets:
+            raise InstallerError("Install manifest has no valid managed target list")
+        expected = {
+            artifact.target: artifact.component for artifact in artifacts(self.context)
+        }
         targets: list[Path] = []
-        for entry in manifest.get("managed_targets", []):
+        seen: set[Path] = set()
+        for entry in raw_targets:
             if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
                 raise InstallerError("Malformed managed target in manifest")
             target = self.context.assert_safe_target(Path(entry["path"]))
+            if target in seen:
+                raise InstallerError(f"Duplicate managed target in manifest: {target}")
+            seen.add(target)
+            if target not in expected:
+                raise InstallerError(
+                    f"Manifest target is not an exact current Fedora Nova artifact: {target}"
+                )
+            component = entry.get("component")
+            expected_type = entry.get("type")
+            expected_fingerprint = entry.get("fingerprint")
+            if (
+                component != expected[target]
+                or expected_type not in {"file", "directory", "symlink"}
+                or not isinstance(expected_fingerprint, str)
+            ):
+                raise InstallerError(
+                    f"Manifest ownership evidence is incomplete: {target}"
+                )
+            if lexists(target):
+                if expected_type != path_kind(target):
+                    raise InstallerError(
+                        f"Managed target type changed; refusing uninstall: {target}"
+                    )
+                if self._artifact_fingerprint(
+                    target, component
+                ) != expected_fingerprint:
+                    raise InstallerError(
+                        f"Managed target differs from the install manifest; "
+                        f"refusing to remove possible user data: {target}"
+                    )
             targets.append(target)
+        missing = set(expected) - seen
+        if missing:
+            rendered = ", ".join(str(path) for path in sorted(missing, key=str))
+            raise InstallerError(
+                f"Install manifest is incomplete; refusing partial uninstall: {rendered}"
+            )
+        return targets
+
+    def uninstall(self, *, dry_run: bool = False) -> Path | None:
+        if not dry_run:
+            self._reset_transaction_state()
+        manifest = load_json(self.context.manifest_path)
+        if manifest is None or manifest.get("format_version") != FORMAT_VERSION:
+            raise InstallerError("Installer V2 manifest is required for safe uninstall")
+        targets = self._validated_uninstall_targets(manifest)
         if dry_run:
             self.reporter.line("BACKUP:")
             for target in targets:
@@ -1284,9 +1601,23 @@ class Installer:
             return None
 
         self._prepare_state_root()
+        lock_fd = self._acquire_transaction_lock()
+        try:
+            manifest = load_json(self.context.manifest_path)
+            if manifest is None or manifest.get("format_version") != FORMAT_VERSION:
+                raise InstallerError(
+                    "Installer V2 manifest is required for safe uninstall"
+                )
+            targets = self._validated_uninstall_targets(manifest)
+            return self._uninstall_locked(targets)
+        finally:
+            self._release_transaction_lock(lock_fd)
+
+    def _uninstall_locked(self, targets: list[Path]) -> Path:
         log_path = self.context.log_root / f"uninstall-{self._timestamp()}.log"
         self.reporter.close()
         self.reporter = Reporter(self.stream, log_path)
+        backup: Path | None = None
         try:
             affected = [
                 *targets,
@@ -1295,14 +1626,28 @@ class Installer:
                 self.context.install_state_path,
             ]
             backup = self._create_backup(affected, reason="uninstall")
+            self.reporter.line(f"Backup before uninstall: {backup}")
             for target in reversed(targets):
                 if lexists(target):
                     self.reporter.line(f"REMOVE {target}")
                     safe_remove(self.context, target)
+                    self._failpoint()
             safe_remove(self.context, self.context.manifest_path)
+            self._failpoint()
             safe_remove(self.context, self.context.install_state_path)
+            self._failpoint()
             self._refresh_caches()
-            self.reporter.line(f"Uninstall complete. Rollback: ./install.sh --rollback {backup}")
+            self.reporter.line(
+                f"Uninstall complete. Rollback: {self._rollback_command(backup)}"
+            )
             return backup
+        except Exception:
+            if backup or self.last_backup:
+                recovery = backup or self.last_backup
+                self.reporter.line(f"Uninstall failed. Backup: {recovery}")
+                self.reporter.line(
+                    f"Rollback command: {self._rollback_command(recovery)}"
+                )
+            raise
         finally:
             self.reporter.close()
